@@ -40,6 +40,16 @@ nsys_analysis_build/
 
 # Cloned repos
 **/NeMo
+**/Megatron-Bridge
+
+# llmb working directory - large/generated files
+llmb/.cache/
+llmb/images/
+llmb/venvs/
+llmb/datasets/
+llmb/tools/
+llmb/experiments/
+llmb/workloads/*/experiments/
 
 # AI agent files
 GEMINI.md

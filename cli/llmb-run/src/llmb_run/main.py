@@ -357,6 +357,9 @@ def submit(
     nice: Annotated[
         Optional[int], typer.Option('--nice', help='Lower the priority of the job using Slurm --nice feature.')
     ] = None,
+    use_sharp: Annotated[
+        bool, typer.Option('--use-sharp', help='Enable SHARP for inter-node communication (requires cluster support).')
+    ] = False,
 ):
     """
     Submit jobs using a unified interface. Supports explicit, discovery, and file-based modes.
@@ -366,6 +369,8 @@ def submit(
     extra_slurm_params = {}
     if nice is not None:
         extra_slurm_params['nice'] = nice
+    if use_sharp:
+        extra_slurm_params['use_sharp'] = True
 
     request = TaskGenerationRequest(
         workloads=app_ctx.workloads,
