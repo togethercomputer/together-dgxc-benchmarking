@@ -344,6 +344,9 @@ class SbatchLauncher(JobLauncher):
         if task.profile:
             env['ENABLE_PROFILE'] = 'true'
 
+        if task.extra_slurm_params and task.extra_slurm_params.get('use_sharp'):
+            env['USE_SHARP'] = 'true'
+
         # Automatically enable VBoost for 'eos' cluster if not explicitly set
         if (
             should_enable_vboost(self.config)
@@ -459,6 +462,9 @@ class ConfiguredSbatchLauncher(JobLauncher):
         if task.profile:
             env['ENABLE_PROFILE'] = 'true'
 
+        if task.extra_slurm_params and task.extra_slurm_params.get('use_sharp'):
+            env['USE_SHARP'] = 'true'
+
         # Automatically enable VBoost for 'eos' cluster if not explicitly set
         if (
             should_enable_vboost(self.config)
@@ -535,6 +541,9 @@ class Nemo2Launcher(JobLauncher):
                 env['ENABLE_PROFILE'] = 'true'
                 if env.get('ENABLE_GPU_METRICS', 'false').lower() == 'true':
                     env['GPU_METRICS_NODES'] = os.getenv('GPU_METRICS_NODES', '0')
+
+            if task.extra_slurm_params and task.extra_slurm_params.get('use_sharp'):
+                env['USE_SHARP'] = 'true'
 
             # Automatically enable VBoost for 'eos' cluster if not explicitly set
             if (

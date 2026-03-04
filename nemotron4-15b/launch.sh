@@ -59,6 +59,8 @@ MAX_STEPS=${MAX_STEPS:-50}
 CPU_PER_TASK_PINNING=${CPU_PER_TASK_PINNING:-0}
 ENABLE_CHECKPOINT=${ENABLE_CHECKPOINT:-false}
 ENABLE_CHECKPOINT=${ENABLE_CHECKPOINT,,}
+USE_SHARP=${USE_SHARP:-false}
+USE_SHARP=${USE_SHARP,,}
 
 # Handle additional SLURM parameters from environment variable
 ADDITIONAL_SLURM_PARAMS=${ADDITIONAL_SLURM_PARAMS:-""}
@@ -153,6 +155,10 @@ fi
 
 if [[ $ENABLE_VBOOST == true ]]; then
     CONFIG_OVERRIDES+=" --enable_vboost true "
+fi
+
+if [[ $USE_SHARP == true ]]; then
+    CONFIG_OVERRIDES+=" -sharp True "
 fi
 
 if [[ -n ${LOAD_CHECKPOINT_PATH-} ]]; then

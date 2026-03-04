@@ -25,15 +25,16 @@
 
 set -eu -o pipefail
 
-# Constants
+# Constants (mutable — can be overridden by --min-iter, --max-iter, or --max-steps)
 # Iterations are zero indexed
-readonly MIN_ITERATION=35
-readonly MAX_ITERATION=44
+MIN_ITERATION=35
+MAX_ITERATION=44
 
 # Default values
 EXPERIMENTS_DIR="experiments"
 OUTPUT_FORMAT="table"
 SHOW_FULL_NAMES=false
+MAX_STEPS=""
 
 # Function to display usage
 usage() {
@@ -43,15 +44,26 @@ Usage: $0 [options] [experiments_directory]
 Options:
     --format=FORMAT     Output format: table (default), csv, json
     --full-names        Show full filenames instead of shortened versions
+    --max-steps=N       Total training steps (auto-sets --min-iter and --max-iter)
+    --min-iter=N        Minimum iteration to analyze (default: $MIN_ITERATION)
+    --max-iter=N        Maximum iteration to analyze (default: $MAX_ITERATION)
     -h, --help         Show this help message
 
 Arguments:
     experiments_directory    Directory containing .out files (default: experiments)
+                             Can be an absolute path or relative to current directory.
+                             Run from the workload directory, e.g.:
+                               cd \$LLMB_INSTALL/workloads/pretrain_llama3.1
+                               $0
+                             Or pass the path directly:
+                               $0 /path/to/workload/experiments
 
 Examples:
     $0                                    # Use default table format
     $0 --format=csv experiments           # CSV output
     $0 --format=json --full-names         # JSON with full filenames
+    $0 --max-steps=10                     # Quick run: analyze last iterations of a 10-step job
+    $0 --min-iter=2 --max-iter=9          # Explicit iteration range
 EOF
 }
 
@@ -70,6 +82,18 @@ while [[ $# -gt 0 ]]; do
             SHOW_FULL_NAMES=true
             shift
             ;;
+        --max-steps=*)
+            MAX_STEPS="${1#*=}"
+            shift
+            ;;
+        --min-iter=*)
+            MIN_ITERATION="${1#*=}"
+            shift
+            ;;
+        --max-iter=*)
+            MAX_ITERATION="${1#*=}"
+            shift
+            ;;
         -h | --help)
             usage
             exit 0
@@ -85,6 +109,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If --max-steps given, auto-compute iteration range (skip step 0 as warmup, analyze rest)
+if [[ -n "$MAX_STEPS" ]]; then
+    MAX_ITERATION=$(( MAX_STEPS - 1 ))
+    MIN_ITERATION=$(( MAX_STEPS > 10 ? MAX_STEPS - 10 : 1 ))
+fi
 
 # Function to shorten filename for display
 shorten_filename() {
@@ -206,7 +236,13 @@ output_footer() {
 
 if [ ! -d "$EXPERIMENTS_DIR" ]; then
     echo "Error: Directory '$EXPERIMENTS_DIR' not found" >&2
-    echo "Usage: $0 [experiments_directory]" >&2
+    echo "" >&2
+    echo "Run from the workload directory, e.g.:" >&2
+    echo "  cd \$LLMB_INSTALL/workloads/pretrain_nemotron4-15b" >&2
+    echo "  bash \$LLMB_INSTALL/llmb_repo/common/parse_train_timing.sh" >&2
+    echo "" >&2
+    echo "Or pass the experiments path directly:" >&2
+    echo "  bash \$LLMB_INSTALL/llmb_repo/common/parse_train_timing.sh \$LLMB_INSTALL/workloads/pretrain_nemotron4-15b/experiments" >&2
     exit 1
 fi
 
@@ -244,28 +280,37 @@ while IFS= read -r file; do
         # Extract timing and TFLOPS data and calculate mean and std dev in single awk pass
         result=$(grep "train_step_timing in s:" "$file" 2> /dev/null \
             | awk -v min_iter="$MIN_ITERATION" -v max_iter="$MAX_ITERATION" '
-            /iteration [0-9]+\/49/ {
-                match($0, /iteration ([0-9]+)\/49/, iter_arr)
-                iteration = iter_arr[1]
-                
+            /iteration [0-9]+\/[0-9]+/ {
+                # POSIX-compatible extraction (no 3-arg match; use 2-arg match + substr + sub)
+                tmp = $0
+                sub(/.*iteration /, "", tmp)
+                split(tmp, _ip, /[^0-9]/)
+                iteration = _ip[1] + 0
+
                 if (iteration >= min_iter && iteration <= max_iter) {
-                    match($0, /train_step_timing in s: ([0-9]+\.?[0-9]*)/, timing_arr)
-                    match($0, /TFLOPS_per_GPU: ([0-9]+\.?[0-9]*([eE][+-]?[0-9]+)?)/, tflops_arr)
-                    if (timing_arr[1] != "") {
+                    # Extract train_step_timing value
+                    timing_val = ""
+                    if (match($0, /train_step_timing in s: [0-9]+\.?[0-9]*/)) {
+                        timing_str = substr($0, RSTART, RLENGTH)
+                        sub(/train_step_timing in s: /, "", timing_str)
+                        timing_val = timing_str + 0
+                    }
+
+                    if (timing_val != "" && timing_val > 0) {
                         count++
-                        time_values[count] = timing_arr[1]
-                        time_sum += timing_arr[1]
-                        
-                        if (tflops_arr[1] != "") {
-                            tflops_count++
-                            # Convert scientific notation to regular number
-                            tflops_val = tflops_arr[1]
-                            if (match(tflops_val, /[eE]/)) {
-                                # Handle scientific notation
-                                tflops_val = sprintf("%.10f", tflops_val)
+                        time_values[count] = timing_val
+                        time_sum += timing_val
+
+                        # Extract TFLOPS value
+                        if (match($0, /TFLOPS_per_GPU: [0-9]+\.?[0-9]*([eE][+-]?[0-9]+)?/)) {
+                            tflops_str = substr($0, RSTART, RLENGTH)
+                            sub(/TFLOPS_per_GPU: /, "", tflops_str)
+                            tflops_val = tflops_str + 0
+                            if (tflops_val > 0) {
+                                tflops_count++
+                                tflops_values[tflops_count] = tflops_val
+                                tflops_sum += tflops_val
                             }
-                            tflops_values[tflops_count] = tflops_val
-                            tflops_sum += tflops_val
                         }
                         if (iteration > max_found) max_found = iteration
                     }
