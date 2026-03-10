@@ -48,8 +48,14 @@ llmb/images/
 llmb/venvs/
 llmb/datasets/
 llmb/tools/
-llmb/experiments/
+llmb/llmb_repo/
+llmb/llmb-run
+llmb/slurm-*.out
 llmb/workloads/*/experiments/
+llmb/workloads/*/llmb-config_*.yaml
+llmb/workloads/*/.slurm_jobs
+llmb/workloads/*/sbatch_*.sh
+**/Nvidia-Comms-Perf-Suite/
 
 # AI agent files
 GEMINI.md
