@@ -1,0 +1,121 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pretrain-qwen3-30b-bf16-profile
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      hostNetwork: true
+      hostIPC: true
+      restartPolicy: Never
+      containers:
+      - name: pretrain-qwen3
+        image: nvcr.io/nvidia/nemo:26.02.00
+        workingDir: /nemo_run/code
+        command: ["bash", "-c"]
+        args:
+        - |
+          mkdir -p /nemo_run/code && \
+          nsys profile \
+            -s none \
+            -t cuda,nvtx \
+            --nvtx-domain-include=NCCL \
+            --capture-range=cudaProfilerApi \
+            --capture-range-end=stop \
+            --force-overwrite true \
+            -o /home/johnson/scratch/profile_%p \
+          torchrun \
+            --nproc_per_node=8 \
+            --master_addr=localhost \
+            --master_port=29500 \
+            /scratch/user/johnson/llmb/workloads/pretrain_qwen3/Megatron-Bridge/scripts/performance/run_script.py \
+            --compute_dtype bf16 \
+            --gpu gb300 \
+            --num_gpus 8 \
+            --gpus_per_node 8 \
+            -m qwen \
+            -mr qwen3_30b_a3b \
+            --custom_mounts /scratch/user/johnson/llmb/.cache/huggingface \
+            -tp 1 -pp 1 -cp 1 -ep 8 -et 1 -gb 64 -mb 1 \
+            --account default \
+            --partition gpu \
+            --log_dir /scratch/user/johnson/llmb/workloads/pretrain_qwen3 \
+            --time_limit 01:40:00 \
+            --max_steps 50 \
+            train.manual_gc=true \
+            train.manual_gc_interval=100 \
+            profiling.use_nsys_profiler=true \
+            profiling.profile_step_start=45 \
+            profiling.profile_step_end=50 \
+          2>&1 | tee /nemo_run/job.log
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+        securityContext:
+          capabilities:
+            add: ["SYS_NICE"]
+          seccompProfile:
+            type: Unconfined
+        env:
+        - name: MASTER_ADDR
+          value: "localhost"
+        - name: MASTER_PORT
+          value: "29500"
+        - name: TORCH_NCCL_AVOID_RECORD_STREAMS
+          value: "1"
+        - name: TRANSFORMERS_OFFLINE
+          value: "0"
+        - name: TOKENIZERS_PARALLELISM
+          value: "False"
+        - name: NCCL_NVLS_ENABLE
+          value: "0"
+        - name: TORCH_NCCL_HIGH_PRIORITY
+          value: "1"
+        - name: HF_HUB_OFFLINE
+          value: "0"
+        - name: NEMORUN_HOME
+          value: "/scratch/user/johnson/llmb/workloads/pretrain_qwen3"
+        - name: NEMO_HOME
+          value: "/scratch/user/johnson/llmb/workloads/pretrain_qwen3"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: HF_TOKEN
+        - name: CUDA_DEVICE_MAX_CONNECTIONS
+          value: "32"
+        - name: NVTE_FWD_LAYERNORM_SM_MARGIN
+          value: "20"
+        - name: NVTE_BWD_LAYERNORM_SM_MARGIN
+          value: "20"
+        - name: NCCL_GRAPH_REGISTER
+          value: "0"
+        - name: PYTHONPATH
+          value: "/scratch/user/johnson/llmb/workloads/pretrain_qwen3/Megatron-Bridge/scripts/performance"
+        volumeMounts:
+        - name: workload
+          mountPath: /scratch/user/johnson/llmb/workloads/pretrain_qwen3
+        - name: hf-cache
+          mountPath: /scratch/user/johnson/llmb/.cache/huggingface
+        - name: nemo-run
+          mountPath: /nemo_run
+        - name: scratch
+          mountPath: /home/johnson/scratch
+      volumes:
+      - name: workload
+        hostPath:
+          path: /scratch/user/johnson/llmb/workloads/pretrain_qwen3
+          type: Directory
+      - name: hf-cache
+        hostPath:
+          path: /scratch/user/johnson/llmb/.cache/huggingface
+          type: DirectoryOrCreate
+      - name: nemo-run
+        hostPath:
+          path: /scratch/user/johnson/llmb/workloads/pretrain_qwen3/experiments/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512_1773170647/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512
+          type: DirectoryOrCreate
+      - name: scratch
+        hostPath:
+          path: /home/johnson/scratch
+          type: Directory
