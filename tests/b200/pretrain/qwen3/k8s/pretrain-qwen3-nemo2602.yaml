@@ -12,18 +12,17 @@ spec:
       containers:
       - name: pretrain-qwen3
         image: nvcr.io/nvidia/nemo:26.02.00
-        workingDir: /nemo_run/code
         command: ["bash", "-c"]
         args:
         - |
-          mkdir -p /nemo_run/code && \
+          mkdir -p /logs && \
           torchrun \
             --nproc_per_node=8 \
             --master_addr=localhost \
             --master_port=29500 \
             /scratch/user/johnson/llmb/workloads/pretrain_qwen3/Megatron-Bridge/scripts/performance/run_script.py \
             --compute_dtype bf16 \
-            --gpu gb300 \
+            --gpu b200 \
             --num_gpus 8 \
             --gpus_per_node 8 \
             -m qwen \
@@ -37,7 +36,7 @@ spec:
             --max_steps 50 \
             train.manual_gc=true \
             train.manual_gc_interval=100 \
-          2>&1 | tee /nemo_run/job.log
+          2>&1 | tee /logs/pretrain-qwen3-30b-bf16.log
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -87,8 +86,8 @@ spec:
           mountPath: /scratch/user/johnson/llmb/workloads/pretrain_qwen3
         - name: hf-cache
           mountPath: /scratch/user/johnson/llmb/.cache/huggingface
-        - name: nemo-run
-          mountPath: /nemo_run
+        - name: logs
+          mountPath: /logs
       volumes:
       - name: workload
         hostPath:
@@ -98,7 +97,7 @@ spec:
         hostPath:
           path: /scratch/user/johnson/llmb/.cache/huggingface
           type: DirectoryOrCreate
-      - name: nemo-run
+      - name: logs
         hostPath:
-          path: /scratch/user/johnson/llmb/workloads/pretrain_qwen3/experiments/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512_1773170647/pretrain_qwen3_30b_a3b_bf16_gpus8_tp1_pp1_cp1_vpNone_ep8_mbs8_gbs512
+          path: /home/johnson/scratch/k8s_jobs/logs
           type: DirectoryOrCreate
