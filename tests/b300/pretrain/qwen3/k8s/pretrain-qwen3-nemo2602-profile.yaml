@@ -30,7 +30,7 @@ spec:
             --master_port=29500 \
             /scratch/user/johnson/llmb/workloads/pretrain_qwen3/Megatron-Bridge/scripts/performance/run_script.py \
             --compute_dtype bf16 \
-            --gpu b200 \
+            --gpu gb300 \
             --num_gpus 8 \
             --gpus_per_node 8 \
             -m qwen \
