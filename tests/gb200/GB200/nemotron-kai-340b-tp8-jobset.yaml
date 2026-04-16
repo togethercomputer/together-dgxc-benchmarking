@@ -1,0 +1,1128 @@
+# Nemotron 340B TP8 (32 nodes) — KAI Scheduler edition
+# ---------------------------------------------------------------------------
+# 32-node torchrun via JobSet: 4 replicated jobs (dp0–dp3) × 8 pods = 32 nodes.
+# Each dp* job is one 32-GPU data-parallel slice (8 nodes × 4 GPUs), pinned with
+# nodeSelector nvidia.com/gpu.clique to one of two full-rack NVLink domains:
+#   dp0, dp1 → rack A   |   dp2, dp3 → rack B
+# pod-grouper creates PodGroup pg-<jobset>-<uid> (gang minMember=32).
+#
+# Read in order: ConfigMap → ComputeDomain → Topology → JobSet.
+# Topology is cluster-scoped. PodGroup is NOT defined here: KAI pod-grouper creates
+# JobSet-owned PodGroup pg-<jobset>-<uid> and sets pod annotation pod-group-name to
+# that object. A second hand-written PodGroup will NOT receive pods — do not duplicate.
+#
+# Before first deploy: kubectl api-resources | grep -E 'topology|podgroup'
+#   Confirm PodGroup apiVersion (e.g. scheduling.run.ai/v2alpha2) and adjust
+#   below if your cluster uses a different version.
+#
+# References:
+#   https://github.com/kai-scheduler/KAI-Scheduler/blob/main/docs/topology/README.md
+#   https://github.com/kai-scheduler/KAI-Scheduler/blob/main/docs/topology/multilevel.md
+#   https://github.com/kai-scheduler/KAI-Scheduler/blob/main/docs/quickstart/README.md
+# ---------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mp-nemo-340b-config
+data:
+  nemotron4-340b-fp8.py: |
+    """Nemo2 pretraining recipe for Nemotron4 340B on GB200.
+
+    TP8 profile for 4-GPU-per-node topology (128 GPUs / 32 nodes):
+      TP=8  PP=4  CP=1  VP=12  DP=4
+      MBS=1  GBS=32
+      SeqLen=4096  Layers=96  HiddenSize=18432
+      BF16/FP8 (cutlass)  CUDA graphs enabled  FSDP=off
+      ~1,616 TFLOPS/GPU confirmed
+    """
+
+    from nemo.collections import llm
+    from nemo.collections.llm.recipes import nemotron4_340b
+    from nemo.lightning.pytorch.callbacks.flops_callback import FLOPsMeasurementCallback
+    from nemo.utils.loggers.dllogger import DLLogger
+    import nemo_run as run
+    from scripts.performance.helpers import set_primary_perf_configs
+    from scripts.performance.utils import get_comm_overlap_callback_idx
+
+
+    def recipe() -> run.Partial:
+        pretrain = nemotron4_340b.pretrain_recipe(performance_mode=True)
+
+        num_nodes = 32
+        num_gpus_per_node = 4
+        mbs = 1
+        gbs = 512
+        max_steps = 1000
+        tp_size = 8
+        pp_size = 4
+        cp_size = 1
+        vp_size = 1
+        ep_size = 1
+        enable_cuda_graphs = True
+        compute_dtype = "fp8"
+        fp8_recipe = "cs"
+
+        pretrain = set_primary_perf_configs(
+            pretrain,
+            "pre_train",
+            num_nodes=num_nodes,
+            num_gpus_per_node=num_gpus_per_node,
+            mbs=mbs,
+            gbs=gbs,
+            max_steps=max_steps,
+            tp_size=tp_size,
+            pp_size=pp_size,
+            cp_size=cp_size,
+            vp_size=vp_size,
+            ep_size=ep_size,
+            enable_cuda_graphs=enable_cuda_graphs,
+            compute_dtype=compute_dtype,
+            fp8_recipe=fp8_recipe,
+            nccl_communicator_config_path=None,
+            use_mcore_fsdp=False,
+            use_fsdp_double_buffer=False,
+            use_user_buffer_registration=False,
+            use_sharp=False,
+            keep_fsdp_fp8_transpose_cache=False,
+        )
+
+        comm_overlap_callback_idx = get_comm_overlap_callback_idx(
+            pretrain.trainer.callbacks
+        )
+        pretrain.trainer.callbacks[
+            comm_overlap_callback_idx
+        ].tp_comm_bootstrap_backend = "nccl"
+        pretrain.trainer.callbacks[
+            comm_overlap_callback_idx
+        ].tp_comm_overlap = False
+
+        pretrain.trainer.limit_val_batches = 0.0
+        pretrain.trainer.val_check_interval = max_steps
+
+        pretrain.log.ckpt = None
+        pretrain.trainer.enable_checkpointing = False
+
+        pretrain.trainer.log_every_n_steps = 1
+
+        pretrain.trainer.callbacks.append(
+            run.Config(
+                FLOPsMeasurementCallback,
+                model_name="nemotron4-340b",
+                model_config=pretrain.model.config,
+                data_config=pretrain.data,
+            )
+        )
+
+        dllogger_config = run.Config(
+            DLLogger,
+            verbose=True,
+            stdout=True,
+            json_file="dllogger.json",
+        )
+        pretrain.log.extra_loggers = [dllogger_config]
+
+        return pretrain
+
+
+    if __name__ == "__main__":
+        run.cli.main(llm.pretrain, default_factory=recipe)
+
+---
+# ComputeDomain (CRD: computedomains.resource.nvidia.com v1beta1)
+# Required spec fields: channel, numNodes. channel.resourceClaimTemplate.name is required.
+# numNodes: 0 is valid (recommended when IMEX/daemon DNS feature gates allow the workload
+# to coordinate size itself — see CRD description on your cluster).
+# spec is immutable after creation (CRD validation).
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: mp-nemo-340b-cd
+spec:
+  numNodes: 0
+  channel:
+    resourceClaimTemplate:
+      name: mp-nemo-340b-cd-channel
+
+# -----------------------------------------------------------------------------
+# KAI Scheduler — Topology CR
+# Docs: https://github.com/kai-scheduler/KAI-Scheduler/blob/main/docs/topology/README.md
+#
+# This tells KAI how to interpret your nodes as a hierarchy (here: NVLink clique
+# domain, then individual machine). Hierarchical PodGroup subGroups use these levels
+# via requiredTopologyLevel when you define a PodGroup yourself (not used in this
+# manifest — JobSet uses the auto-created pg-* PodGroup). If you patch the generated
+# PodGroup or add constraints elsewhere, align level strings with your CRD.
+# If "same rack" for you is a different label than nvidia.com/gpu.clique, edit
+# the first level to match your operator (e.g. topology.kubernetes.io/rack).
+# -----------------------------------------------------------------------------
+---
+# Topology (CRD: topologies.kai.scheduler v1alpha1)
+# spec.levels: 1–16 entries; each item only sets nodeLabel. Levels must be unique.
+# kubernetes.io/hostname is only allowed on the LAST level (CRD rule) — keep it coarse→fine.
+apiVersion: kai.scheduler/v1alpha1
+kind: Topology
+metadata:
+  name: cluster-topology
+spec:
+  levels:
+  - nodeLabel: nvidia.com/gpu.clique
+  - nodeLabel: kubernetes.io/hostname
+
+# -----------------------------------------------------------------------------
+# JobSet: 4 replicated Jobs (dp0–dp3), each 8 indexed pods = 32 nodes / 128 GPUs.
+# Each job is one 32-GPU data-parallel replica (8 nodes × 4 GPUs). Global node
+# ranks: dp0 → 0–7, dp1 → 8–15, dp2 → 16–23, dp3 → 24–31 (matches prior r00–r15 pair order).
+# Rack pinning: dp0+dp1 require nvidia.com/gpu.clique rack A; dp2+dp3 require rack B.
+# DNS: <jobset>-dpN-0-I.<jobset> for N in 0..3, I in 0..7.
+# -----------------------------------------------------------------------------
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: mp-nemo340b
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+
+  # NOTE: Adjust the following per-job values to match your cluster:
+  #   - k8s.v1.cni.cncf.io/networks: NetworkAttachmentDefinition names (kubectl get net-attach-def)
+  #   - nvidia.com/gpu.clique: your NVLink clique IDs (kubectl get nodes -L nvidia.com/gpu.clique)
+  #     dp0+dp1 share one rack/clique, dp2+dp3 share another
+  #   - NCCL_IB_HCA: InfiniBand HCA device names (run: ibstat)
+
+  - name: dp0
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 8
+        parallelism: 8
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            labels:
+              kai.scheduler/queue: default-queue
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            schedulerName: kai-scheduler
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              nvidia.com/gpu.clique: "<RACK_A_CLIQUE_ID>"
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:25.09
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: JOB_IDENTIFIER
+                value: mp-nemo340b
+              - name: MASTER_PORT
+                value: "6002"
+              - name: NNODES
+                value: "32"
+              - name: GPUS_PER_NODE
+                value: "4"
+              - name: NEMO_LAUNCH_SCRIPT
+                value: /workload/configs/nemotron4-340b-fp8.py
+              - name: FIXED_GBS
+                value: "128"
+              - name: EXPLICIT_LOG_DIR
+                value: workload_logs
+              - name: ARTIFACT_DIR
+                value: /tmp/artifacts
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                JOBSET_NAME="mp-nemo340b"
+                NNODES="${NNODES:?}"
+                GPUS_PER_NODE="${GPUS_PER_NODE:?}"
+                # Global node rank 0–31 from JobSet hostname …-dpN-0-I… (same order as old r00–r15 layout).
+                short=$(hostname -s)
+                if [[ ! "$short" =~ -dp([0-3])-0-([0-7]) ]]; then
+                  echo "ERROR: expected -dp0-0-0..-dp3-0-7 in hostname, got=${short}"
+                  exit 1
+                fi
+                DP_IDX="${BASH_REMATCH[1]}"
+                COMP_IDX="${BASH_REMATCH[2]}"
+                NODE_RANK=$((10#$DP_IDX * 8 + 10#$COMP_IDX))
+                echo "dp=${DP_IDX} idx=${COMP_IDX} JOB_COMPLETION_INDEX=${JOB_COMPLETION_INDEX} global NODE_RANK=${NODE_RANK}/${NNODES}"
+                MASTER_ADDR="${JOBSET_NAME}-dp0-0-0.${JOBSET_NAME}"
+                READY_PORT=29555
+                MAX_RETRIES=180
+                SLEEP_SECS=2
+                sleep 10
+                
+                pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+                
+                python ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0 \
+                  --to-yaml exported_nemo_config.yaml
+                
+                echo "--- Exported NeMo config ---"
+                cat exported_nemo_config.yaml
+                echo "---"
+                
+                # Pre-launch barrier: every peer must be DNS + TCP reachable before torchrun.
+                export READY_PORT
+                python - <<'PY' &
+                import os
+                import socket
+                
+                port = int(os.getenv("READY_PORT", "29555"))
+                s = socket.socket()
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+                s.listen(256)
+                while True:
+                    conn, _ = s.accept()
+                    conn.close()
+                PY
+                READY_PID=$!
+                trap 'kill "${READY_PID}" >/dev/null 2>&1 || true' EXIT
+                echo "Readiness listener started on ${HOSTNAME}:${READY_PORT} (pid=${READY_PID})"
+                echo "Beginning cluster readiness barrier for ${NNODES} pods"
+                
+                for dp in 0 1 2 3; do
+                  for i in $(seq 0 7); do
+                  HOST="${JOBSET_NAME}-dp${dp}-0-${i}.${JOBSET_NAME}"
+                  echo "[Barrier] Checking host dp${dp}-${i} (${HOST})"
+                
+                  tries=0
+                  until getent ahostsv4 "${HOST}" >/dev/null 2>&1; do
+                    tries=$((tries + 1))
+                    echo "[Barrier][DNS wait] ${HOST} not resolvable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: DNS not ready for ${HOST}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][DNS ok] ${HOST}"
+                
+                  tries=0
+                  until python - <<PY
+                import socket
+                import sys
+                
+                host = "${HOST}"
+                port = int("${READY_PORT}")
+                s = socket.socket()
+                s.settimeout(1.0)
+                try:
+                    s.connect((host, port))
+                    s.close()
+                    sys.exit(0)
+                except Exception:
+                    sys.exit(1)
+                PY
+                  do
+                    tries=$((tries + 1))
+                    echo "[Barrier][TCP wait] ${HOST}:${READY_PORT} not reachable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: readiness port not reachable on ${HOST}:${READY_PORT}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][TCP ok] ${HOST}:${READY_PORT} ready"
+                  done
+                done
+                
+                echo "All ${NNODES} pods are DNS+TCP ready; starting torchrun"
+                
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${NODE_RANK}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0
+                
+                # Global rank 0, not merely completion index 0 in one Job.
+                if [[ "${NODE_RANK}" == "0" ]]; then
+                  mkdir -p ${ARTIFACT_DIR}
+                  cp -r ${EXPLICIT_LOG_DIR}/* ${ARTIFACT_DIR}/ 2>/dev/null || true
+                  cp ${NEMO_LAUNCH_SCRIPT} ${ARTIFACT_DIR}/run-cli.py 2>/dev/null || true
+                  cp dllogger.json ${ARTIFACT_DIR}/dllogger.json 2>/dev/null || true
+                  cp exported_nemo_config.yaml ${ARTIFACT_DIR}/nemo-configuration.yaml 2>/dev/null || true
+                  env > ${ARTIFACT_DIR}/environ.txt 2>/dev/null || true
+                  echo "Artifacts saved to ${ARTIFACT_DIR}:"
+                  ls ${ARTIFACT_DIR}
+                fi
+                
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mp-nemo-340b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mp-nemo-340b-config
+                items:
+                - key: nemotron4-340b-fp8.py
+                  path: nemotron4-340b-fp8.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+
+  - name: dp1
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 8
+        parallelism: 8
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            labels:
+              kai.scheduler/queue: default-queue
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            schedulerName: kai-scheduler
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              nvidia.com/gpu.clique: "<RACK_A_CLIQUE_ID>"
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:25.09
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: JOB_IDENTIFIER
+                value: mp-nemo340b
+              - name: MASTER_PORT
+                value: "6002"
+              - name: NNODES
+                value: "32"
+              - name: GPUS_PER_NODE
+                value: "4"
+              - name: NEMO_LAUNCH_SCRIPT
+                value: /workload/configs/nemotron4-340b-fp8.py
+              - name: FIXED_GBS
+                value: "128"
+              - name: EXPLICIT_LOG_DIR
+                value: workload_logs
+              - name: ARTIFACT_DIR
+                value: /tmp/artifacts
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                JOBSET_NAME="mp-nemo340b"
+                NNODES="${NNODES:?}"
+                GPUS_PER_NODE="${GPUS_PER_NODE:?}"
+                # Global node rank 0–31 from JobSet hostname …-dpN-0-I… (same order as old r00–r15 layout).
+                short=$(hostname -s)
+                if [[ ! "$short" =~ -dp([0-3])-0-([0-7]) ]]; then
+                  echo "ERROR: expected -dp0-0-0..-dp3-0-7 in hostname, got=${short}"
+                  exit 1
+                fi
+                DP_IDX="${BASH_REMATCH[1]}"
+                COMP_IDX="${BASH_REMATCH[2]}"
+                NODE_RANK=$((10#$DP_IDX * 8 + 10#$COMP_IDX))
+                echo "dp=${DP_IDX} idx=${COMP_IDX} JOB_COMPLETION_INDEX=${JOB_COMPLETION_INDEX} global NODE_RANK=${NODE_RANK}/${NNODES}"
+                MASTER_ADDR="${JOBSET_NAME}-dp0-0-0.${JOBSET_NAME}"
+                READY_PORT=29555
+                MAX_RETRIES=180
+                SLEEP_SECS=2
+                sleep 10
+                
+                pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+                
+                python ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0 \
+                  --to-yaml exported_nemo_config.yaml
+                
+                echo "--- Exported NeMo config ---"
+                cat exported_nemo_config.yaml
+                echo "---"
+                
+                # Pre-launch barrier: every peer must be DNS + TCP reachable before torchrun.
+                export READY_PORT
+                python - <<'PY' &
+                import os
+                import socket
+                
+                port = int(os.getenv("READY_PORT", "29555"))
+                s = socket.socket()
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+                s.listen(256)
+                while True:
+                    conn, _ = s.accept()
+                    conn.close()
+                PY
+                READY_PID=$!
+                trap 'kill "${READY_PID}" >/dev/null 2>&1 || true' EXIT
+                echo "Readiness listener started on ${HOSTNAME}:${READY_PORT} (pid=${READY_PID})"
+                echo "Beginning cluster readiness barrier for ${NNODES} pods"
+                
+                for dp in 0 1 2 3; do
+                  for i in $(seq 0 7); do
+                  HOST="${JOBSET_NAME}-dp${dp}-0-${i}.${JOBSET_NAME}"
+                  echo "[Barrier] Checking host dp${dp}-${i} (${HOST})"
+                
+                  tries=0
+                  until getent ahostsv4 "${HOST}" >/dev/null 2>&1; do
+                    tries=$((tries + 1))
+                    echo "[Barrier][DNS wait] ${HOST} not resolvable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: DNS not ready for ${HOST}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][DNS ok] ${HOST}"
+                
+                  tries=0
+                  until python - <<PY
+                import socket
+                import sys
+                
+                host = "${HOST}"
+                port = int("${READY_PORT}")
+                s = socket.socket()
+                s.settimeout(1.0)
+                try:
+                    s.connect((host, port))
+                    s.close()
+                    sys.exit(0)
+                except Exception:
+                    sys.exit(1)
+                PY
+                  do
+                    tries=$((tries + 1))
+                    echo "[Barrier][TCP wait] ${HOST}:${READY_PORT} not reachable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: readiness port not reachable on ${HOST}:${READY_PORT}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][TCP ok] ${HOST}:${READY_PORT} ready"
+                  done
+                done
+                
+                echo "All ${NNODES} pods are DNS+TCP ready; starting torchrun"
+                
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${NODE_RANK}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0
+                
+                # Global rank 0, not merely completion index 0 in one Job.
+                if [[ "${NODE_RANK}" == "0" ]]; then
+                  mkdir -p ${ARTIFACT_DIR}
+                  cp -r ${EXPLICIT_LOG_DIR}/* ${ARTIFACT_DIR}/ 2>/dev/null || true
+                  cp ${NEMO_LAUNCH_SCRIPT} ${ARTIFACT_DIR}/run-cli.py 2>/dev/null || true
+                  cp dllogger.json ${ARTIFACT_DIR}/dllogger.json 2>/dev/null || true
+                  cp exported_nemo_config.yaml ${ARTIFACT_DIR}/nemo-configuration.yaml 2>/dev/null || true
+                  env > ${ARTIFACT_DIR}/environ.txt 2>/dev/null || true
+                  echo "Artifacts saved to ${ARTIFACT_DIR}:"
+                  ls ${ARTIFACT_DIR}
+                fi
+                
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mp-nemo-340b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mp-nemo-340b-config
+                items:
+                - key: nemotron4-340b-fp8.py
+                  path: nemotron4-340b-fp8.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+
+  - name: dp2
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 8
+        parallelism: 8
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            labels:
+              kai.scheduler/queue: default-queue
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            schedulerName: kai-scheduler
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              nvidia.com/gpu.clique: "<RACK_B_CLIQUE_ID>"
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:25.09
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: JOB_IDENTIFIER
+                value: mp-nemo340b
+              - name: MASTER_PORT
+                value: "6002"
+              - name: NNODES
+                value: "32"
+              - name: GPUS_PER_NODE
+                value: "4"
+              - name: NEMO_LAUNCH_SCRIPT
+                value: /workload/configs/nemotron4-340b-fp8.py
+              - name: FIXED_GBS
+                value: "128"
+              - name: EXPLICIT_LOG_DIR
+                value: workload_logs
+              - name: ARTIFACT_DIR
+                value: /tmp/artifacts
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                JOBSET_NAME="mp-nemo340b"
+                NNODES="${NNODES:?}"
+                GPUS_PER_NODE="${GPUS_PER_NODE:?}"
+                # Global node rank 0–31 from JobSet hostname …-dpN-0-I… (same order as old r00–r15 layout).
+                short=$(hostname -s)
+                if [[ ! "$short" =~ -dp([0-3])-0-([0-7]) ]]; then
+                  echo "ERROR: expected -dp0-0-0..-dp3-0-7 in hostname, got=${short}"
+                  exit 1
+                fi
+                DP_IDX="${BASH_REMATCH[1]}"
+                COMP_IDX="${BASH_REMATCH[2]}"
+                NODE_RANK=$((10#$DP_IDX * 8 + 10#$COMP_IDX))
+                echo "dp=${DP_IDX} idx=${COMP_IDX} JOB_COMPLETION_INDEX=${JOB_COMPLETION_INDEX} global NODE_RANK=${NODE_RANK}/${NNODES}"
+                MASTER_ADDR="${JOBSET_NAME}-dp0-0-0.${JOBSET_NAME}"
+                READY_PORT=29555
+                MAX_RETRIES=180
+                SLEEP_SECS=2
+                sleep 10
+                
+                pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+                
+                python ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0 \
+                  --to-yaml exported_nemo_config.yaml
+                
+                echo "--- Exported NeMo config ---"
+                cat exported_nemo_config.yaml
+                echo "---"
+                
+                # Pre-launch barrier: every peer must be DNS + TCP reachable before torchrun.
+                export READY_PORT
+                python - <<'PY' &
+                import os
+                import socket
+                
+                port = int(os.getenv("READY_PORT", "29555"))
+                s = socket.socket()
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+                s.listen(256)
+                while True:
+                    conn, _ = s.accept()
+                    conn.close()
+                PY
+                READY_PID=$!
+                trap 'kill "${READY_PID}" >/dev/null 2>&1 || true' EXIT
+                echo "Readiness listener started on ${HOSTNAME}:${READY_PORT} (pid=${READY_PID})"
+                echo "Beginning cluster readiness barrier for ${NNODES} pods"
+                
+                for dp in 0 1 2 3; do
+                  for i in $(seq 0 7); do
+                  HOST="${JOBSET_NAME}-dp${dp}-0-${i}.${JOBSET_NAME}"
+                  echo "[Barrier] Checking host dp${dp}-${i} (${HOST})"
+                
+                  tries=0
+                  until getent ahostsv4 "${HOST}" >/dev/null 2>&1; do
+                    tries=$((tries + 1))
+                    echo "[Barrier][DNS wait] ${HOST} not resolvable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: DNS not ready for ${HOST}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][DNS ok] ${HOST}"
+                
+                  tries=0
+                  until python - <<PY
+                import socket
+                import sys
+                
+                host = "${HOST}"
+                port = int("${READY_PORT}")
+                s = socket.socket()
+                s.settimeout(1.0)
+                try:
+                    s.connect((host, port))
+                    s.close()
+                    sys.exit(0)
+                except Exception:
+                    sys.exit(1)
+                PY
+                  do
+                    tries=$((tries + 1))
+                    echo "[Barrier][TCP wait] ${HOST}:${READY_PORT} not reachable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: readiness port not reachable on ${HOST}:${READY_PORT}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][TCP ok] ${HOST}:${READY_PORT} ready"
+                  done
+                done
+                
+                echo "All ${NNODES} pods are DNS+TCP ready; starting torchrun"
+                
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${NODE_RANK}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0
+                
+                # Global rank 0, not merely completion index 0 in one Job.
+                if [[ "${NODE_RANK}" == "0" ]]; then
+                  mkdir -p ${ARTIFACT_DIR}
+                  cp -r ${EXPLICIT_LOG_DIR}/* ${ARTIFACT_DIR}/ 2>/dev/null || true
+                  cp ${NEMO_LAUNCH_SCRIPT} ${ARTIFACT_DIR}/run-cli.py 2>/dev/null || true
+                  cp dllogger.json ${ARTIFACT_DIR}/dllogger.json 2>/dev/null || true
+                  cp exported_nemo_config.yaml ${ARTIFACT_DIR}/nemo-configuration.yaml 2>/dev/null || true
+                  env > ${ARTIFACT_DIR}/environ.txt 2>/dev/null || true
+                  echo "Artifacts saved to ${ARTIFACT_DIR}:"
+                  ls ${ARTIFACT_DIR}
+                fi
+                
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mp-nemo-340b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mp-nemo-340b-config
+                items:
+                - key: nemotron4-340b-fp8.py
+                  path: nemotron4-340b-fp8.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+
+  - name: dp3
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 8
+        parallelism: 8
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            labels:
+              kai.scheduler/queue: default-queue
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            schedulerName: kai-scheduler
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              nvidia.com/gpu.clique: "<RACK_B_CLIQUE_ID>"
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:25.09
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: JOB_IDENTIFIER
+                value: mp-nemo340b
+              - name: MASTER_PORT
+                value: "6002"
+              - name: NNODES
+                value: "32"
+              - name: GPUS_PER_NODE
+                value: "4"
+              - name: NEMO_LAUNCH_SCRIPT
+                value: /workload/configs/nemotron4-340b-fp8.py
+              - name: FIXED_GBS
+                value: "128"
+              - name: EXPLICIT_LOG_DIR
+                value: workload_logs
+              - name: ARTIFACT_DIR
+                value: /tmp/artifacts
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                JOBSET_NAME="mp-nemo340b"
+                NNODES="${NNODES:?}"
+                GPUS_PER_NODE="${GPUS_PER_NODE:?}"
+                # Global node rank 0–31 from JobSet hostname …-dpN-0-I… (same order as old r00–r15 layout).
+                short=$(hostname -s)
+                if [[ ! "$short" =~ -dp([0-3])-0-([0-7]) ]]; then
+                  echo "ERROR: expected -dp0-0-0..-dp3-0-7 in hostname, got=${short}"
+                  exit 1
+                fi
+                DP_IDX="${BASH_REMATCH[1]}"
+                COMP_IDX="${BASH_REMATCH[2]}"
+                NODE_RANK=$((10#$DP_IDX * 8 + 10#$COMP_IDX))
+                echo "dp=${DP_IDX} idx=${COMP_IDX} JOB_COMPLETION_INDEX=${JOB_COMPLETION_INDEX} global NODE_RANK=${NODE_RANK}/${NNODES}"
+                MASTER_ADDR="${JOBSET_NAME}-dp0-0-0.${JOBSET_NAME}"
+                READY_PORT=29555
+                MAX_RETRIES=180
+                SLEEP_SECS=2
+                sleep 10
+                
+                pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+                
+                python ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0 \
+                  --to-yaml exported_nemo_config.yaml
+                
+                echo "--- Exported NeMo config ---"
+                cat exported_nemo_config.yaml
+                echo "---"
+                
+                # Pre-launch barrier: every peer must be DNS + TCP reachable before torchrun.
+                export READY_PORT
+                python - <<'PY' &
+                import os
+                import socket
+                
+                port = int(os.getenv("READY_PORT", "29555"))
+                s = socket.socket()
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+                s.listen(256)
+                while True:
+                    conn, _ = s.accept()
+                    conn.close()
+                PY
+                READY_PID=$!
+                trap 'kill "${READY_PID}" >/dev/null 2>&1 || true' EXIT
+                echo "Readiness listener started on ${HOSTNAME}:${READY_PORT} (pid=${READY_PID})"
+                echo "Beginning cluster readiness barrier for ${NNODES} pods"
+                
+                for dp in 0 1 2 3; do
+                  for i in $(seq 0 7); do
+                  HOST="${JOBSET_NAME}-dp${dp}-0-${i}.${JOBSET_NAME}"
+                  echo "[Barrier] Checking host dp${dp}-${i} (${HOST})"
+                
+                  tries=0
+                  until getent ahostsv4 "${HOST}" >/dev/null 2>&1; do
+                    tries=$((tries + 1))
+                    echo "[Barrier][DNS wait] ${HOST} not resolvable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: DNS not ready for ${HOST}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][DNS ok] ${HOST}"
+                
+                  tries=0
+                  until python - <<PY
+                import socket
+                import sys
+                
+                host = "${HOST}"
+                port = int("${READY_PORT}")
+                s = socket.socket()
+                s.settimeout(1.0)
+                try:
+                    s.connect((host, port))
+                    s.close()
+                    sys.exit(0)
+                except Exception:
+                    sys.exit(1)
+                PY
+                  do
+                    tries=$((tries + 1))
+                    echo "[Barrier][TCP wait] ${HOST}:${READY_PORT} not reachable yet (${tries}/${MAX_RETRIES})"
+                    if [ "${tries}" -ge "${MAX_RETRIES}" ]; then
+                      echo "ERROR: readiness port not reachable on ${HOST}:${READY_PORT}"
+                      kill "${READY_PID}" >/dev/null 2>&1 || true
+                      exit 1
+                    fi
+                    sleep "${SLEEP_SECS}"
+                  done
+                  echo "[Barrier][TCP ok] ${HOST}:${READY_PORT} ready"
+                  done
+                done
+                
+                echo "All ${NNODES} pods are DNS+TCP ready; starting torchrun"
+                
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${NODE_RANK}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=1000 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0
+                
+                # Global rank 0, not merely completion index 0 in one Job.
+                if [[ "${NODE_RANK}" == "0" ]]; then
+                  mkdir -p ${ARTIFACT_DIR}
+                  cp -r ${EXPLICIT_LOG_DIR}/* ${ARTIFACT_DIR}/ 2>/dev/null || true
+                  cp ${NEMO_LAUNCH_SCRIPT} ${ARTIFACT_DIR}/run-cli.py 2>/dev/null || true
+                  cp dllogger.json ${ARTIFACT_DIR}/dllogger.json 2>/dev/null || true
+                  cp exported_nemo_config.yaml ${ARTIFACT_DIR}/nemo-configuration.yaml 2>/dev/null || true
+                  env > ${ARTIFACT_DIR}/environ.txt 2>/dev/null || true
+                  echo "Artifacts saved to ${ARTIFACT_DIR}:"
+                  ls ${ARTIFACT_DIR}
+                fi
+                
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mp-nemo-340b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mp-nemo-340b-config
+                items:
+                - key: nemotron4-340b-fp8.py
+                  path: nemotron4-340b-fp8.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+
+  successPolicy:
+    operator: All
