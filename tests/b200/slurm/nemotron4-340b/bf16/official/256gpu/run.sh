@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# OFFICIAL NVIDIA BASELINE — Nemotron4 340B BF16 — 256 GPUs (32 nodes)
+# Source: https://github.com/NVIDIA/dgxc-benchmarking/blob/main/nemotron4-340b/README.md
+#
+# B200 Config: TP=8, PP=4, VP=12, MBS=1, GBS=64 (256/4), SeqLen=4096
+# Container: nvidia+nemo+25.07.01 (NeMo2 framework)
+# CUDA graphs: enabled
+#
+
+set -euo pipefail
+
+DGXC_REPO=/mnt/vast/johnson/dgxc-benchmarking
+
+echo "=== Nemotron4 340B BF16 — 256 GPU — NVIDIA Official Baseline ==="
+echo "Config: TP=8, PP=4, VP=12, MBS=1, GBS=64, CUDA_GRAPH=true"
+echo ""
+
+cd "${DGXC_REPO}/nemotron4-340b"
+LLMB_INSTALL=/mnt/vast/johnson/llmb \
+  JOB_TOTAL_GPUS=256 \
+  GPU_TYPE=b200 \
+  DTYPE=bf16 \
+  SBATCH_ACCOUNT=root \
+  SBATCH_PARTITION=batch \
+  bash launch.sh
