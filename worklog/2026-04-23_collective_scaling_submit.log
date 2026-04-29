@@ -1,0 +1,95 @@
+======================================================
+  NCCL Collective Scaling Benchmark
+======================================================
+  Nodes:     1 2 4 8 16 32 64
+  Ops:       all_reduce all_gather sendrecv
+  Algos:     ring nvls tree nvls_tree collnet_sharp
+  Sizes:     2G -> 16G (factor 2)
+  Iters:     5 warmup + 20 measured
+  Exclude:   use3a-ss-b200-gpu-[181,190]
+  Results:   /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/collective-scaling/20260423_220412
+  Dry run:   0
+======================================================
+
+[1/1] nccl-all_reduce-ring-1n -> Job 84725
+[2/2] nccl-all_reduce-nvls-1n -> Job 84726
+[3/3] nccl-all_gather-ring-1n -> Job 84727
+[4/4] nccl-all_gather-nvls-1n -> Job 84728
+[5/5] nccl-sendrecv-p2p-1n -> Job 84729
+[6/6] nccl-all_reduce-ring-2n -> Job 84730
+[7/7] nccl-all_reduce-nvls-2n -> Job 84731
+[8/8] nccl-all_reduce-tree-2n -> Job 84732
+[9/9] nccl-all_reduce-nvls_tree-2n -> Job 84733
+[10/10] nccl-all_reduce-collnet_sharp-2n -> Job 84734
+[11/11] nccl-all_gather-ring-2n -> Job 84735
+[12/12] nccl-all_gather-nvls-2n -> Job 84736
+[13/13] nccl-all_gather-tree-2n -> Job 84737
+[14/14] nccl-all_gather-nvls_tree-2n -> Job 84738
+[15/15] nccl-all_gather-collnet_sharp-2n -> Job 84739
+[16/16] nccl-sendrecv-p2p-2n -> Job 84740
+[17/17] nccl-all_reduce-ring-4n -> Job 84741
+[18/18] nccl-all_reduce-nvls-4n -> Job 84742
+[19/19] nccl-all_reduce-tree-4n -> Job 84743
+[20/20] nccl-all_reduce-nvls_tree-4n -> Job 84744
+[21/21] nccl-all_reduce-collnet_sharp-4n -> Job 84745
+[22/22] nccl-all_gather-ring-4n -> Job 84746
+[23/23] nccl-all_gather-nvls-4n -> Job 84747
+[24/24] nccl-all_gather-tree-4n -> Job 84748
+[25/25] nccl-all_gather-nvls_tree-4n -> Job 84749
+[26/26] nccl-all_gather-collnet_sharp-4n -> Job 84750
+[27/27] nccl-sendrecv-p2p-4n -> Job 84751
+[28/28] nccl-all_reduce-ring-8n -> Job 84752
+[29/29] nccl-all_reduce-nvls-8n -> Job 84753
+[30/30] nccl-all_reduce-tree-8n -> Job 84754
+[31/31] nccl-all_reduce-nvls_tree-8n -> Job 84755
+[32/32] nccl-all_reduce-collnet_sharp-8n -> Job 84756
+[33/33] nccl-all_gather-ring-8n -> Job 84757
+[34/34] nccl-all_gather-nvls-8n -> Job 84758
+[35/35] nccl-all_gather-tree-8n -> Job 84759
+[36/36] nccl-all_gather-nvls_tree-8n -> Job 84760
+[37/37] nccl-all_gather-collnet_sharp-8n -> Job 84761
+[38/38] nccl-sendrecv-p2p-8n -> Job 84762
+[39/39] nccl-all_reduce-ring-16n -> Job 84763
+[40/40] nccl-all_reduce-nvls-16n -> Job 84764
+[41/41] nccl-all_reduce-tree-16n -> Job 84765
+[42/42] nccl-all_reduce-nvls_tree-16n -> Job 84766
+[43/43] nccl-all_reduce-collnet_sharp-16n -> Job 84767
+[44/44] nccl-all_gather-ring-16n -> Job 84768
+[45/45] nccl-all_gather-nvls-16n -> Job 84769
+[46/46] nccl-all_gather-tree-16n -> Job 84770
+[47/47] nccl-all_gather-nvls_tree-16n -> Job 84771
+[48/48] nccl-all_gather-collnet_sharp-16n -> Job 84772
+[49/49] nccl-sendrecv-p2p-16n -> Job 84773
+[50/50] nccl-all_reduce-ring-32n -> Job 84774
+[51/51] nccl-all_reduce-nvls-32n -> Job 84775
+[52/52] nccl-all_reduce-tree-32n -> Job 84776
+[53/53] nccl-all_reduce-nvls_tree-32n -> Job 84777
+[54/54] nccl-all_reduce-collnet_sharp-32n -> Job 84778
+[55/55] nccl-all_gather-ring-32n -> Job 84779
+[56/56] nccl-all_gather-nvls-32n -> Job 84780
+[57/57] nccl-all_gather-tree-32n -> Job 84781
+[58/58] nccl-all_gather-nvls_tree-32n -> Job 84782
+[59/59] nccl-all_gather-collnet_sharp-32n -> Job 84783
+[60/60] nccl-sendrecv-p2p-32n -> Job 84784
+[61/61] nccl-all_reduce-ring-64n -> Job 84785
+[62/62] nccl-all_reduce-nvls-64n -> Job 84786
+[63/63] nccl-all_reduce-tree-64n -> Job 84787
+[64/64] nccl-all_reduce-nvls_tree-64n -> Job 84788
+[65/65] nccl-all_reduce-collnet_sharp-64n -> Job 84789
+[66/66] nccl-all_gather-ring-64n -> Job 84790
+[67/67] nccl-all_gather-nvls-64n -> Job 84791
+[68/68] nccl-all_gather-tree-64n -> Job 84792
+[69/69] nccl-all_gather-nvls_tree-64n -> Job 84793
+[70/70] nccl-all_gather-collnet_sharp-64n -> Job 84794
+[71/71] nccl-sendrecv-p2p-64n -> Job 84795
+
+======================================================
+  Submitted: 71  |  Skipped: 6 (1-node inter-node algos)
+  Total jobs: 71
+  Results:    /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/collective-scaling/20260423_220412
+  Job IDs:    84725..84795
+
+  Monitor:  squeue -u johnson
+  Wait all: squeue -u johnson -h | wc -l
+======================================================
+  Manifest: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/collective-scaling/20260423_220412/manifest.txt

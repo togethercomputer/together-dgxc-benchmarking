@@ -1,0 +1,140 @@
+========== Session A: remaining 6 jobs ==========
+--- [llama70b_fp8_512] pretrain_llama3.1 70b fp8 512gpu ---
+Jobs (1):
+  - pretrain_llama3.1_70b          dtype=fp8    scale=512    profile=False   proxy=False 
+
+Launch Output:
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/Megatron-Bridge 
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+─ Entering Experiment pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_… ─
+[14:03:23] INFO     Imported module 'configs.llama'.                 utils.py:91
+           INFO     Loaded config:                                  utils.py:101
+                    LLAMA3_70B_PRETRAIN_CONFIG_B200_FP8_MX_V2                   
+           INFO     WorkloadBaseConfig(num_gpus=64,                 utils.py:102
+                    tensor_model_parallel_size=2,                               
+                    pipeline_model_parallel_size=4,                             
+                    context_parallel_size=1,                                    
+                    virtual_pipeline_model_parallel_size=5,                     
+                    expert_model_parallel_size=1,                               
+                    expert_tensor_parallel_size=None,                           
+                    global_batch_size=256, micro_batch_size=1,                  
+                    use_megatron_fsdp=None, nccl_ub=None,                       
+                    cuda_graph_impl=None, cuda_graph_scope=None,                
+                    cpu_offloading_num_layers=None,                             
+                    recompute_num_layers=None,                                  
+                    recompute_modules=None,                                     
+                    moe_flex_dispatcher_backend=None,                           
+                    moe_a2a_overlap=False, peft=None,                           
+                    pp_layout=None)                                             
+           INFO     Set CUDA_DEVICE_MAX_CONNECTIONS to 32    perf_plugins.py:249
+           INFO     PerfEnvPlugin added CLI overrides:       perf_plugins.py:365
+                    train.manual_gc=true,                                       
+                    train.manual_gc_interval=100                                
+[14:03:23] Launching job                                       experiment.py:798
+           pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_                  
+           ep1_etpNone_mbs1_gbs256 for experiment                               
+           pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_                  
+           ep1_etpNone_mbs1_gbs256                                              
+           INFO     Launched app: slurm_tunnel://nemo_run/84378  launcher.py:116
+─ Detaching from Experiment pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp… ─
+           Task specific cleanup won't be run.                experiment.py:1210
+           Ephemeral logs and artifacts may be lost.                            
+
+Experiment Status for 
+pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_17767
+19003
+
+Task 0: 
+pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+- Status: SUBMITTED
+- Executor: SlurmExecutor on @localhost
+- Job id: 84378
+- Local Directory: 
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_7
+0b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp
+8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776719003/pretrain_llama3_
+70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+
+# The experiment was run with the following tasks: ['pretrain_llama3_70b_fp8_mx_
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_
+experiment.cancel("pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNon
+
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_et
+nemo experiment logs pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpN
+nemo experiment cancel pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_et
+                                                                                
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+LAUNCHED: pretrain_llama3.1_70b          dtype=fp8    scale=512    profile=False   proxy=False  jobid=84378
+JobID: 84378, Workdir: /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776719003/pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+  Job ID: 84378
+  Patched max_steps in pretrain_llama3_70b_fp8_mx_gpus512_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256.sh
+--- [nemotron4_340b_fp8_512] nemotron4-340b fp8 512gpu ---
+/mnt/vast/johnson/llmb/workloads/pretrain_nemotron4-340b/NeMo /mnt/vast/johnson/dgxc-benchmarking/nemotron4-340b
+/mnt/vast/johnson/llmb_venv/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[NeMo W 2026-04-20 14:04:37 nemo_logging:405] /mnt/vast/johnson/llmb_venv/lib/python3.12/site-packages/pydub/utils.py:170: RuntimeWarning: Couldn't find ffmpeg or avconv - defaulting to ffmpeg, but may not work
+      warn("Couldn't find ffmpeg or avconv - defaulting to ffmpeg, but may not work", RuntimeWarning)
+    
+WARNING: transformer_engine not installed. Using default recipe.
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] Using /mnt/vast/johnson/llmb/workloads/pretrain_nemotron4-340b/NeMo/scripts/performance/recommended_model_configs/model_configs_b200.csv for loading default recommended model configs
+[NeMo W 2026-04-20 14:04:41 nemo_logging:405] Missing performance configs for pre_train-nemotron4-340b-fp8
+[NeMo W 2026-04-20 14:04:41 nemo_logging:405] Make sure you provide all necessary arguments in the command line
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] Received model parallel configs: 
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] num_nodes=64
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] num_gpus_per_node=8
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] mbs=1
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] gbs=128
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] tp_size=8
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] pp_size=4
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] cp_size=1
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] vp_size=12
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] ep_size=1
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] etp_size=None
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] enable_cuda_graphs=True
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] use_mcore_fsdp=False
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] recompute_layers=0
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] activation_offload_layers=0
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] recompute_modules=None
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] keep_fsdp_fp8_transpose_cache=False
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] use_user_buffer_registration=False
+[NeMo I 2026-04-20 14:04:41 nemo_logging:393] use_sharp=False
+─ Entering Experiment pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mb… ─
+[14:04:42] Launching job                                       experiment.py:795
+           pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp1                  
+           2_mbs1_gbs128 for experiment                                         
+           pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp1                  
+           2_mbs1_gbs128                                                        
+[14:04:42] INFO     Launched app: slurm_tunnel://nemo_run/84379  launcher.py:116
+─ Detaching from Experiment pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_v… ─
+           Task specific cleanup won't be run.                experiment.py:1207
+           Ephemeral logs and artifacts may be lost.                            
+
+
+Experiment Status for 
+pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs128_1776719081
+
+Task 0: pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs128
+- Status: SUBMITTED
+- Executor: SlurmExecutor on @localhost
+- Job id: 84379
+- Local Directory: /mnt/vast/johnson/llmb/workloads/pretrain_nemotron4-340b/experiments/pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs128/pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs128_1776719081/pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs128
+
+                                                                                
+# The experiment was run with the following tasks: ['pretrain_nemotron4_340b_fp8
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs12
+experiment.cancel("pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_gbs
+                                                                                
+                                                                                
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1
+nemo experiment logs pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1_g
+nemo experiment cancel pretrain_nemotron4_340b_fp8_gpus512_tp8_pp4_cp1_vp12_mbs1
+                                                                                
+/mnt/vast/johnson/dgxc-benchmarking/nemotron4-340b
