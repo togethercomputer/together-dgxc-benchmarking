@@ -20,6 +20,9 @@ LLMB_DIR=/mnt/vast/johnson/llmb
 DGXC_REPO=/mnt/vast/johnson/dgxc-benchmarking
 IMAGE_26=/mnt/vast/johnson/llmb/images/nvidia+nemo+26.02.00.sqsh
 MAX_STEPS=10
+# Session A: exclude unhealthy nodes (130 missing /opt/hpcx; others drained/down per 2026-04-20 briefing)
+EXCLUDE_NODES='use3a-ss-b200-gpu-[130,190,197,199,201,211,233,239]'
+SESSION_TAG=sessA
 
 # Parse arguments
 RUN_TIER1=false
@@ -74,7 +77,7 @@ submit_llmb() {
     if [[ -n "$size" ]]; then
         cmd+=" -s ${size}"
     fi
-    cmd+=" -d ${dtype} --scale ${scale}"
+    cmd+=" -d ${dtype} --scale ${scale} --exclude ${EXCLUDE_NODES}"
 
     if $DRY_RUN; then
         echo "  [DRY-RUN] cd ${LLMB_DIR} && ${cmd}"
@@ -103,6 +106,7 @@ submit_llmb() {
 
     echo "  Job ID: ${job_id}"
     JOBS["$label"]="$job_id"
+    scontrol update job="$job_id" JobName="${SESSION_TAG}_${label}" 2>/dev/null || true
 
     # Post-patch: find the newly created experiment script and change max_steps
     sleep 1  # brief wait for filesystem
@@ -265,9 +269,9 @@ submit_nemotron4_340b() {
     local patched_script="${sbatch_script%.sh}_patched.sh"
     patch_legacy_sbatch "$sbatch_script" "$patched_script"
 
-    # Resubmit with patched script
+    # Resubmit with patched script (exclude unhealthy nodes, tag Session A)
     local new_job_id
-    new_job_id=$(sbatch --parsable "$patched_script" 2>/dev/null)
+    new_job_id=$(sbatch --parsable --exclude="${EXCLUDE_NODES}" --job-name="${SESSION_TAG}_${label}" "$patched_script" 2>/dev/null)
     if [[ -n "$new_job_id" ]]; then
         echo "  Resubmitted as Job ID: ${new_job_id}"
         JOBS["$label"]="$new_job_id"
@@ -337,9 +341,9 @@ submit_grok1() {
     local patched_script="${sbatch_script%.sh}_patched.sh"
     patch_legacy_sbatch "$sbatch_script" "$patched_script"
 
-    # Resubmit with patched script
+    # Resubmit with patched script (exclude unhealthy nodes, tag Session A)
     local new_job_id
-    new_job_id=$(sbatch --parsable "$patched_script" 2>/dev/null)
+    new_job_id=$(sbatch --parsable --exclude="${EXCLUDE_NODES}" --job-name="${SESSION_TAG}_${label}" "$patched_script" 2>/dev/null)
     if [[ -n "$new_job_id" ]]; then
         echo "  Resubmitted as Job ID: ${new_job_id}"
         JOBS["$label"]="$new_job_id"

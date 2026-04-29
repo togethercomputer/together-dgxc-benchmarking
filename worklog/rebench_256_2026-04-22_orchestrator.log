@@ -1,0 +1,156 @@
+[2026-04-22 16:29:54] === Batch start: 256-GPU rebench 2026-04-22 ===
+[2026-04-22 16:29:54] waiting for pre-existing job 84589 (Llama 70B NVFP4)
+[2026-04-22 16:29:54]   waiting for llama70b_nvfp4 (84589)
+[2026-04-22 16:32:54]   llama70b_nvfp4 (84589) left queue
+[2026-04-22 16:33:24]   RESULT llama70b nvfp4: iter5=-s - TFLOPS, ss_avg=- [INCOMPLETE]
+[2026-04-22 16:33:24] submitting llama70b (pretrain_llama3.1 70b fp8)
+Jobs (1):
+  - pretrain_llama3.1_70b          dtype=fp8    scale=256    profile=False   proxy=False 
+
+Launch Output:
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/Megatron-Bridge 
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+─ Entering Experiment pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_… ─
+[16:33:33] INFO     Imported module 'configs.llama'.                 utils.py:91
+           INFO     Loaded config:                                  utils.py:101
+                    LLAMA3_70B_PRETRAIN_CONFIG_B200_FP8_MX_V2                   
+           INFO     WorkloadBaseConfig(num_gpus=64,                 utils.py:102
+                    tensor_model_parallel_size=2,                               
+                    pipeline_model_parallel_size=4,                             
+                    context_parallel_size=1,                                    
+                    virtual_pipeline_model_parallel_size=5,                     
+                    expert_model_parallel_size=1,                               
+                    expert_tensor_parallel_size=None,                           
+                    global_batch_size=256, micro_batch_size=1,                  
+                    use_megatron_fsdp=None, nccl_ub=None,                       
+                    cuda_graph_impl=None, cuda_graph_scope=None,                
+                    cpu_offloading_num_layers=None,                             
+                    recompute_num_layers=None,                                  
+                    recompute_modules=None,                                     
+                    moe_flex_dispatcher_backend=None,                           
+                    moe_a2a_overlap=False, peft=None,                           
+                    pp_layout=None)                                             
+           INFO     Set CUDA_DEVICE_MAX_CONNECTIONS to 32    perf_plugins.py:249
+           INFO     PerfEnvPlugin added CLI overrides:       perf_plugins.py:365
+                    train.manual_gc=true,                                       
+                    train.manual_gc_interval=100                                
+[16:33:34] Launching job                                       experiment.py:798
+           pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_                  
+           ep1_etpNone_mbs1_gbs256 for experiment                               
+           pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_                  
+           ep1_etpNone_mbs1_gbs256                                              
+[16:33:34] INFO     Launched app: slurm_tunnel://nemo_run/84590  launcher.py:116
+─ Detaching from Experiment pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp… ─
+           Task specific cleanup won't be run.                experiment.py:1210
+           Ephemeral logs and artifacts may be lost.                            
+
+Experiment Status for 
+pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_17769
+00813
+
+Task 0: 
+pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+- Status: SUBMITTED
+- Executor: SlurmExecutor on @localhost
+- Job id: 84590
+- Local Directory: 
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_7
+0b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp
+8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776900813/pretrain_llama3_
+70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+
+# The experiment was run with the following tasks: ['pretrain_llama3_70b_fp8_mx_
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_
+experiment.cancel("pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNon
+
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_et
+nemo experiment logs pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpN
+nemo experiment cancel pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_et
+                                                                                
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+LAUNCHED: pretrain_llama3.1_70b          dtype=fp8    scale=256    profile=False   proxy=False  jobid=84590
+JobID: 84590, Workdir: /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776900813/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256
+[2026-04-22 16:33:34]   job 84590
+[2026-04-22 16:33:39]   patched max_steps in /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776900813/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/scripts/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256.sh
+[2026-04-22 16:33:40]   waiting for llama70b (84590)
+[2026-04-22 16:40:10]   llama70b (84590) left queue
+[2026-04-22 16:40:40]   RESULT llama70b fp8: iter5=-s - TFLOPS, ss_avg=- [INCOMPLETE]
+[2026-04-22 16:40:40] submitting llama405b (pretrain_llama3.1 405b nvfp4)
+Jobs (1):
+  - pretrain_llama3.1_405b         dtype=nvfp4  scale=256    profile=False   proxy=False 
+
+Launch Output:
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/Megatron-Bridge 
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+─ Entering Experiment pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep… ─
+[16:40:47] INFO     Imported module 'configs.llama'.                 utils.py:91
+           WARNING  Config variant                                  utils.py:110
+                    'LLAMA31_405B_PRETRAIN_CONFIG_B200_NVFP4_V2'                
+                    not found; falling back to                                  
+                    'LLAMA31_405B_PRETRAIN_CONFIG_B200_NVFP4_V1'.               
+           INFO     WorkloadBaseConfig(num_gpus=128,                utils.py:115
+                    tensor_model_parallel_size=4,                               
+                    pipeline_model_parallel_size=16,                            
+                    context_parallel_size=1,                                    
+                    virtual_pipeline_model_parallel_size=8,                     
+                    expert_model_parallel_size=1,                               
+                    expert_tensor_parallel_size=None,                           
+                    global_batch_size=64, micro_batch_size=1,                   
+                    use_megatron_fsdp=None, nccl_ub=None,                       
+                    cuda_graph_impl=None, cuda_graph_scope=None,                
+                    cpu_offloading_num_layers=None,                             
+                    recompute_num_layers=1, recompute_modules=None,             
+                    moe_flex_dispatcher_backend=None,                           
+                    moe_a2a_overlap=False, peft=None,                           
+                    pp_layout=None)                                             
+           INFO     Set CUDA_DEVICE_MAX_CONNECTIONS to 32    perf_plugins.py:249
+           INFO     PerfEnvPlugin added CLI overrides:       perf_plugins.py:365
+                    train.manual_gc=true,                                       
+                    train.manual_gc_interval=100                                
+[16:40:48] Launching job                                       experiment.py:798
+           pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp                  
+           8_ep1_etpNone_mbs1_gbs1536 for experiment                            
+           pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp                  
+           8_ep1_etpNone_mbs1_gbs1536                                           
+[16:40:48] INFO     Launched app: slurm_tunnel://nemo_run/84591  launcher.py:116
+─ Detaching from Experiment pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_… ─
+           Task specific cleanup won't be run.                experiment.py:1210
+           Ephemeral logs and artifacts may be lost.                            
+
+Experiment Status for 
+pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536_17
+76901247
+
+Task 0: 
+pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536
+- Status: SUBMITTED
+- Executor: SlurmExecutor on @localhost
+- Job id: 84591
+- Local Directory: 
+/mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama31_
+405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/pretrain_llama31_40
+5b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536_1776901247/pretrain_l
+lama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536
+
+# The experiment was run with the following tasks: ['pretrain_llama31_405b_nvfp4
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_llama31_405b_nvfp4_gpus256_tp4_pp1
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNon
+experiment.cancel("pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpN
+
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_
+nemo experiment logs pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_et
+nemo experiment cancel pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_
+                                                                                
+/mnt/vast/johnson/llmb/llmb_repo/llama3.1
+LAUNCHED: pretrain_llama3.1_405b         dtype=nvfp4  scale=256    profile=False   proxy=False  jobid=84591
+JobID: 84591, Workdir: /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536_1776901247/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536
+[2026-04-22 16:40:49]   job 84591
+[2026-04-22 16:40:54]   patched max_steps in /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536_1776901247/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/scripts/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536.sh
+[2026-04-22 16:40:54]   waiting for llama405b (84591)

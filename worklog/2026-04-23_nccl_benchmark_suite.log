@@ -1,0 +1,137 @@
+======================================================
+  B200 Cluster Benchmark Suite
+======================================================
+  Partition:  batch
+  GPU type:   B200
+  Nodes:      all available
+  NCCL:       true
+  Date:       2026-04-23 21:42:15
+======================================================
+
+--- GPU Health ---
+=== GPU Health Check ===
+  Partition: batch
+  Nodes:     all available
+  Results:   /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/gpu_health_20260423_214215
+  Submitted job 84663
+  Monitor:  squeue -j 84663
+  Results:  /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/gpu_health_20260423_214215/gpu_health_84663.out
+
+--- FA4 (FlashAttention-4 BF16) ---
+=== FA4 Benchmark Submission ===
+  Partition: batch
+  Nodes:     all available
+  Results:   /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/fa4_bench_20260423_214215
+
+  Submitted job 84664
+  Monitor:  squeue -j 84664
+  Results:  /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/fa4_bench_20260423_214215/fa4_bench_84664.out
+
+--- FP8 + NVFP4 GEMM ---
+=== GEMM Benchmark Submission ===
+  Partition: batch
+  Nodes:     all available
+  Bench:     both
+
+  [fp8_gemm] Job 84665 -> /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/fp8_gemm_bench_20260423_214215
+  [nvfp4_gemm] Job 84666 -> /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/nvfp4_gemm_bench_20260423_214215
+
+  Monitor: squeue -u johnson
+
+--- NCCL Scale-Out ---
+======================================================
+  NCCL Scale-Out Benchmark — Batch Submit
+======================================================
+  GPU:         B200
+  Node counts: 2 4 8 16 32 64
+  Tests/scale: 9
+  Total jobs:  54
+  Sizes:       1M -> 8G (factor 2)
+  Iters:       5 warmup + 20 measured
+  Timestamp:   20260423_214215
+======================================================
+
+=== 2 nodes (8 GPUs/node = 16 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_2nodes
+    [all_reduce/ring] Job 84667
+    [all_reduce/nvls] Job 84668
+    [all_reduce/collnet_sharp] Job 84669
+    [all_gather/ring] Job 84670
+    [all_gather/nvls] Job 84671
+    [all_gather/collnet_sharp] Job 84672
+    [reduce_scatter/ring] Job 84673
+    [reduce_scatter/nvls] Job 84674
+    [reduce_scatter/collnet_sharp] Job 84675
+
+=== 4 nodes (8 GPUs/node = 32 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_4nodes
+    [all_reduce/ring] Job 84676
+    [all_reduce/nvls] Job 84677
+    [all_reduce/collnet_sharp] Job 84678
+    [all_gather/ring] Job 84679
+    [all_gather/nvls] Job 84680
+    [all_gather/collnet_sharp] Job 84681
+    [reduce_scatter/ring] Job 84682
+    [reduce_scatter/nvls] Job 84683
+    [reduce_scatter/collnet_sharp] Job 84684
+
+=== 8 nodes (8 GPUs/node = 64 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_8nodes
+    [all_reduce/ring] Job 84685
+    [all_reduce/nvls] Job 84686
+    [all_reduce/collnet_sharp] Job 84687
+    [all_gather/ring] Job 84688
+    [all_gather/nvls] Job 84689
+    [all_gather/collnet_sharp] Job 84690
+    [reduce_scatter/ring] Job 84691
+    [reduce_scatter/nvls] Job 84692
+    [reduce_scatter/collnet_sharp] Job 84693
+
+=== 16 nodes (8 GPUs/node = 128 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_16nodes
+    [all_reduce/ring] Job 84694
+    [all_reduce/nvls] Job 84695
+    [all_reduce/collnet_sharp] Job 84696
+    [all_gather/ring] Job 84697
+    [all_gather/nvls] Job 84698
+    [all_gather/collnet_sharp] Job 84699
+    [reduce_scatter/ring] Job 84700
+    [reduce_scatter/nvls] Job 84701
+    [reduce_scatter/collnet_sharp] Job 84702
+
+=== 32 nodes (8 GPUs/node = 256 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_32nodes
+    [all_reduce/ring] Job 84703
+    [all_reduce/nvls] Job 84704
+    [all_reduce/collnet_sharp] Job 84705
+    [all_gather/ring] Job 84706
+    [all_gather/nvls] Job 84707
+    [all_gather/collnet_sharp] Job 84708
+    [reduce_scatter/ring] Job 84709
+    [reduce_scatter/nvls] Job 84710
+    [reduce_scatter/collnet_sharp] Job 84711
+
+=== 64 nodes (8 GPUs/node = 512 GPUs) ===
+    Results: /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_64nodes
+    [all_reduce/ring] Job 84712
+    [all_reduce/nvls] Job 84713
+    [all_reduce/collnet_sharp] Job 84714
+    [all_gather/ring] Job 84715
+    [all_gather/nvls] Job 84716
+    [all_gather/collnet_sharp] Job 84717
+    [reduce_scatter/ring] Job 84718
+    [reduce_scatter/nvls] Job 84719
+    [reduce_scatter/collnet_sharp] Job 84720
+
+======================================================
+  Submitted 54 jobs
+  Monitor:  squeue -u johnson
+  Results:  /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/20260423_214215_slurm_*
+======================================================
+
+TIMESTAMP=20260423_214215
+
+======================================================
+  All jobs submitted. Monitor: squeue -u johnson
+  Results:  /mnt/vast/dgxc-benchmarking-auto/nccl-results/B200/
+======================================================

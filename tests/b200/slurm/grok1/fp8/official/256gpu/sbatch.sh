@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Grok1 314B BF16 - 256 GPUs (32 nodes)
+# Grok1 314B FP8 - 256 GPUs (32 nodes)
 # Config: TP=4, PP=4, EP=8, VP=8, MBS=1, GBS=512, SeqLen=8192
 # Container: nvidia+nemo+25.09.00
 # TP_COMM_OVERLAP=False to bypass PMIx v3/v4 mismatch (MPI stub removed — causes TE userbuffer hang)
@@ -9,12 +9,12 @@
 # Parameters
 #SBATCH --account=root
 #SBATCH --exclusive
-#SBATCH --job-name=grok1_314b_bf16_256gpu_no_tp_overlap
+#SBATCH --job-name=grok1_314b_fp8_256gpu
 #SBATCH --mem=0
 #SBATCH --nodes=32
 #SBATCH --ntasks-per-node=8
 #SBATCH --open-mode=append
-#SBATCH --output=/mnt/vast/johnson/llmb/workloads/pretrain_grok1/experiments/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512_1776219201/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/sbatch_grok1_bf16_256gpu_%j.out
+#SBATCH --output=/mnt/vast/johnson/llmb/workloads/pretrain_grok1/experiments/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512_1776219297/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/sbatch_grok1_fp8_256gpu_%j.out
 #SBATCH --partition=batch
 #SBATCH --time=00:35:00
 #SBATCH --exclude=use3a-ss-b200-gpu-[145,190]
@@ -79,10 +79,10 @@ export OMPI_MCA_plm=isolated
 
 
 # Experiment directory (reuse existing experiment with code/configs)
-EXP_DIR=/mnt/vast/johnson/llmb/workloads/pretrain_grok1/experiments/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512_1776219201/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512
+EXP_DIR=/mnt/vast/johnson/llmb/workloads/pretrain_grok1/experiments/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512_1776219297/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512
 
 # Command 1
-srun --output ${EXP_DIR}/log-grok1_bf16_256gpu_%j_${SLURM_RESTART_COUNT:-0}.out \
+srun --output ${EXP_DIR}/log-grok1_fp8_256gpu_%j_${SLURM_RESTART_COUNT:-0}.out \
   --container-image /mnt/vast/johnson/llmb/images/nvidia+nemo+25.09.00.sqsh \
   --container-mounts /mnt/vast/johnson/llmb/.cache/huggingface,${EXP_DIR}:/nemo_run \
   --container-workdir /nemo_run/code \
@@ -112,7 +112,6 @@ print("PATCHED on_fit_start")
 # Patch 2: TE extension - disable tp_comm_overlap gates and ub_name assignments
 te_ext = "/opt/megatron-lm/megatron/core/extensions/transformer_engine.py"
 with open(te_ext) as f: content = f.read()
-original = content
 n1 = len(re.findall(r"if self\.config\.tp_comm_overlap(?![\w_]):", content))
 content = re.sub(r"if self\.config\.tp_comm_overlap(?![\w_]):", "if False:  # tp_comm_overlap disabled", content)
 n2 = len(re.findall(r"extra_kwargs\[\"ub_name\"\]\s*=\s*tp_comm_buffer_name", content))
@@ -133,7 +132,7 @@ PATCHEOF
     touch /tmp/.nemo_patch_done
 fi
 while [ ! -f /tmp/.nemo_patch_done ]; do sleep 0.1; done
-bash /nemo_run/scripts/pretrain_grok1_314b_bf16_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512.sh'
+bash /nemo_run/scripts/pretrain_grok1_314b_fp8_gpus256_tp4_pp4_cp1_vp8_ep8_etp1_mbs1_gbs512.sh'
 
 exitcode=$?
 
@@ -144,7 +143,7 @@ echo "job exited with code $exitcode"
 # Log-based success validation
 if [ $exitcode -ne 0 ]; then
     echo "[LOG_CHECK] Job failed with exit code $exitcode - validating logs..."
-    LOG_PATTERN="${EXP_DIR}/log-grok1_bf16_256gpu_${SLURM_JOB_ID}_*.out"
+    LOG_PATTERN="${EXP_DIR}/log-grok1_fp8_256gpu_${SLURM_JOB_ID}_*.out"
     LATEST_LOG=""
     MAX_RESTART_COUNT=-1
     for log_file in $LOG_PATTERN; do

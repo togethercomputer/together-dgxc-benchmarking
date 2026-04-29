@@ -1,0 +1,15 @@
+[2026-04-22 16:29:54] === Batch start: 256-GPU rebench 2026-04-22 ===
+[2026-04-22 16:29:54] waiting for pre-existing job 84589 (Llama 70B NVFP4)
+[2026-04-22 16:29:54]   waiting for llama70b_nvfp4 (84589)
+[2026-04-22 16:32:54]   llama70b_nvfp4 (84589) left queue
+[2026-04-22 16:33:24]   RESULT llama70b nvfp4: iter5=-s - TFLOPS, ss_avg=- [INCOMPLETE]
+[2026-04-22 16:33:24] submitting llama70b (pretrain_llama3.1 70b fp8)
+[2026-04-22 16:33:34]   job 84590
+[2026-04-22 16:33:39]   patched max_steps in /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256_1776900813/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256/scripts/pretrain_llama3_70b_fp8_mx_gpus256_tp2_pp4_cp1_vp5_ep1_etpNone_mbs1_gbs256.sh
+[2026-04-22 16:33:40]   waiting for llama70b (84590)
+[2026-04-22 16:40:10]   llama70b (84590) left queue
+[2026-04-22 16:40:40]   RESULT llama70b fp8: iter5=-s - TFLOPS, ss_avg=- [INCOMPLETE]
+[2026-04-22 16:40:40] submitting llama405b (pretrain_llama3.1 405b nvfp4)
+[2026-04-22 16:40:49]   job 84591
+[2026-04-22 16:40:54]   patched max_steps in /mnt/vast/johnson/llmb/workloads/pretrain_llama3.1/experiments/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536_1776901247/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536/scripts/pretrain_llama31_405b_nvfp4_gpus256_tp4_pp16_cp1_vp8_ep1_etpNone_mbs1_gbs1536.sh
+[2026-04-22 16:40:54]   waiting for llama405b (84591)

@@ -1,0 +1,115 @@
+Session B submission — Thu Apr 23 08:54:25 PM PDT 2026
+Cluster idle nodes: 68
+
+
+==============================================================
+  [B_dsv3_bf16_512] launching via MAX_STEPS=10         RUN_CONF_IMAGE=/mnt/vast/johnson/llmb/images/nvidia+nemo+26.02.00.sqsh         LLMB_INSTALL=/mnt/vast/johnson/llmb         JOB_TOTAL_GPUS=512         GPU_TYPE=b200         DTYPE=bf16         SBATCH_ACCOUNT=root         SBATCH_PARTITION=batch         ADDITIONAL_SLURM_PARAMS='job-name=B_dsv3_bf16_512'         bash launch.sh
+==============================================================
+           INFO     Set CUDA_DEVICE_MAX_CONNECTIONS to 32    perf_plugins.py:249
+           INFO     PerfEnvPlugin added CLI overrides:       perf_plugins.py:365
+                    train.manual_gc=true,                                       
+                    train.manual_gc_interval=100                                
+[20:54:47] Launching job                                       experiment.py:795
+           pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNo                  
+           ne_ep8_etp1_mbs1_gbs4096 for experiment                              
+           pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNo                  
+           ne_ep8_etp1_mbs1_gbs4096                                             
+[20:54:47] INFO     Launched app: slurm_tunnel://nemo_run/84659  launcher.py:116
+─ Detaching from Experiment pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vp… ─
+           Task specific cleanup won't be run.                experiment.py:1207
+           Ephemeral logs and artifacts may be lost.                            
+
+
+Experiment Status for 
+pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777
+002885
+
+Task 0: pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096
+- Status: SUBMITTED
+- Executor: SlurmExecutor on @localhost
+- Job id: 84659
+- Local Directory: /mnt/vast/johnson/llmb/workloads/pretrain_deepseek-v3/experiments/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777002885/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096
+
+                                                                                
+# The experiment was run with the following tasks: ['pretrain_deepseek_v3_bf16_g
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_
+experiment.cancel("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp
+                                                                                
+                                                                                
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8
+nemo experiment logs pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_e
+nemo experiment cancel pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8
+                                                                                
+/mnt/vast/johnson/dgxc-benchmarking/deepseek_v3/pretrain/megatron_bridge
+  Auto-submitted: 84659 (will cancel + patch + resubmit)
+  Generated: /mnt/vast/johnson/llmb/workloads/pretrain_deepseek-v3/experiments/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777002885/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_sbatch.sh
+  Patched: pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_sbatch.sh
+  Resubmitted as Job 84660 (name: B_dsv3_bf16_512)
+
+==============================================================
+Submitted jobs:
+B_dsv3_bf16_512 84650
+B_dsv3_bf16_512 84660
+==============================================================
+Session B submission — Thu Apr 23 09:15:38 PM PDT 2026
+Cluster idle nodes: 68
+
+
+==============================================================
+  [B_dsv3_bf16_512] launching via MAX_STEPS=10         RUN_CONF_IMAGE=/mnt/vast/johnson/llmb/images/nvidia+nemo+26.02.00.sqsh         LLMB_INSTALL=/mnt/vast/johnson/llmb         JOB_TOTAL_GPUS=512         GPU_TYPE=b200         DTYPE=bf16         SBATCH_ACCOUNT=root         SBATCH_PARTITION=batch         ADDITIONAL_SLURM_PARAMS='job-name=B_dsv3_bf16_512'         bash launch.sh
+==============================================================
+           INFO     Set CUDA_DEVICE_MAX_CONNECTIONS to 32    perf_plugins.py:249
+           INFO     PerfEnvPlugin added CLI overrides:       perf_plugins.py:365
+                    train.manual_gc=true,                                       
+                    train.manual_gc_interval=100                                
+[21:15:57] Launching job                                       experiment.py:795
+           pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNo                  
+           ne_ep8_etp1_mbs1_gbs4096 for experiment                              
+           pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNo                  
+           ne_ep8_etp1_mbs1_gbs4096                                             
+[21:15:57] INFO     Launched app: slurm_tunnel://nemo_run/84661  launcher.py:116
+─ Detaching from Experiment pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vp… ─
+           Task specific cleanup won't be run.                experiment.py:1207
+           Ephemeral logs and artifacts may be lost.                            
+
+
+Experiment Status for 
+pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777
+004155
+
+Task 0: pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096
+- Status: PENDING
+- Executor: SlurmExecutor on @localhost
+- Job id: 84661
+- Local Directory: /mnt/vast/johnson/llmb/workloads/pretrain_deepseek-v3/experiments/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777004155/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096
+
+                                                                                
+# The experiment was run with the following tasks: ['pretrain_deepseek_v3_bf16_g
+# You can inspect and reconstruct this experiment at a later point in time using
+experiment = run.Experiment.from_id("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_
+experiment.status() # Gets the overall status                                   
+experiment.logs("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_
+experiment.cancel("pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp
+                                                                                
+                                                                                
+# You can inspect this experiment at a later point in time using the CLI as well
+nemo experiment status pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8
+nemo experiment logs pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_e
+nemo experiment cancel pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8
+                                                                                
+/mnt/vast/johnson/dgxc-benchmarking/deepseek_v3/pretrain/megatron_bridge
+  Auto-submitted: 84661 (will cancel + patch + resubmit)
+  Generated: /mnt/vast/johnson/llmb/workloads/pretrain_deepseek-v3/experiments/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_1777004155/pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_sbatch.sh
+  Patched: pretrain_deepseek_v3_bf16_gpus512_tp1_pp16_cp1_vpNone_ep8_etp1_mbs1_gbs4096_sbatch.sh
+  Resubmitted as Job 84662 (name: B_dsv3_bf16_512)
+
+==============================================================
+Submitted jobs:
+B_dsv3_bf16_512 84650
+B_dsv3_bf16_512 84660
+B_dsv3_bf16_512 84662
+==============================================================
