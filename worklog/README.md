@@ -26,6 +26,13 @@ Engineering notes, analysis reports, and profiler findings from B200 cluster opt
 | Apr 13 | `2026-04-13_nemotron4_15b_slack_update.md` | Nemotron4 15B slack update |
 | Apr 14 | `2026-04-14_official_baselines_vs_optimized.md` | NVIDIA official configs vs our optimized results, gaps to run |
 | Apr 14 | `2026-04-14_benchmark_comparison.md` | Reference TFLOP/s vs Johnson's results, all models side-by-side |
+| May 1 | `2026-05-01_dgxc_installation.md` | dgxc-benchmarking install on slinky B200 cluster (issues + fixes) |
+| May 2 | `2026-05-02_256gpu_benchmark_report.md` | 256-GPU benchmark sweep on use3a-ss B200 cluster |
+| May 10 | `2026-05-10_flapping_airplanes_256gpu_benchmark_report.md` | 256-GPU sweep on flapping-airplanes (15 workloads) |
+| May 11 | `2026-05-11_exemplar_benchmark_summary.md` | 512-GPU sweep summary vs 256-GPU and Tranche-1 targets |
+| May 11 | `2026-05-11_flapping_airplanes_512gpu_benchmark_report.md` | First full-cluster 512-GPU LLM sweep (8 workloads) |
+| May 12 | `2026-05-12_flapping_airplanes_256gpu_benchmark_report.md` | Post-SHARP-abort 256-GPU recovery run (7/8 valid) |
+| —     | `template_256gpu_benchmark_report.md` | Template for new N-GPU sweep reports |
 
 ## Profiler Reports
 
