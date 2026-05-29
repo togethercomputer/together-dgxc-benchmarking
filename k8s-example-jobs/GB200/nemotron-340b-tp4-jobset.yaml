@@ -1,0 +1,292 @@
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mp-nemo-340b-config
+data:
+  nemotron4-340b-fp8.py: |
+    """Nemo2 pretraining recipe for Nemotron4 340B on GB200.
+
+    Intra-node TP config for 4-GPU-per-node topology (128 GPUs / 32 nodes):
+      TP=4  PP=16  CP=1  VP=1  DP=2
+      MBS=1  GBS=256
+      SeqLen=4096  Layers=96  HiddenSize=18432
+      BF16/FP8 (cutlass)  CUDA graphs enabled  FSDP=off
+      ~1,616 TFLOPS/GPU confirmed
+    """
+
+    from nemo.collections import llm
+    from nemo.collections.llm.recipes import nemotron4_340b
+    from nemo.lightning.pytorch.callbacks.flops_callback import FLOPsMeasurementCallback
+    from nemo.utils.loggers.dllogger import DLLogger
+    import nemo_run as run
+    from scripts.performance.helpers import set_primary_perf_configs
+    from scripts.performance.utils import get_comm_overlap_callback_idx
+
+
+    def recipe() -> run.Partial:
+        pretrain = nemotron4_340b.pretrain_recipe(performance_mode=True)
+
+        num_nodes = 32
+        num_gpus_per_node = 4
+        mbs = 1
+        gbs = 256
+        max_steps = 30
+        tp_size = 4
+        pp_size = 16
+        cp_size = 1
+        vp_size = 1
+        ep_size = 1
+        enable_cuda_graphs = True
+        compute_dtype = "fp8"
+        fp8_recipe = "cs"
+
+        pretrain = set_primary_perf_configs(
+            pretrain,
+            "pre_train",
+            num_nodes=num_nodes,
+            num_gpus_per_node=num_gpus_per_node,
+            mbs=mbs,
+            gbs=gbs,
+            max_steps=max_steps,
+            tp_size=tp_size,
+            pp_size=pp_size,
+            cp_size=cp_size,
+            vp_size=vp_size,
+            ep_size=ep_size,
+            enable_cuda_graphs=enable_cuda_graphs,
+            compute_dtype=compute_dtype,
+            fp8_recipe=fp8_recipe,
+            nccl_communicator_config_path=None,
+            use_mcore_fsdp=False,
+            use_fsdp_double_buffer=False,
+            use_user_buffer_registration=False,
+            use_sharp=False,
+            keep_fsdp_fp8_transpose_cache=False,
+        )
+
+        comm_overlap_callback_idx = get_comm_overlap_callback_idx(
+            pretrain.trainer.callbacks
+        )
+        pretrain.trainer.callbacks[
+            comm_overlap_callback_idx
+        ].tp_comm_bootstrap_backend = "nccl"
+
+        pretrain.trainer.limit_val_batches = 0.0
+        pretrain.trainer.val_check_interval = max_steps
+
+        pretrain.log.ckpt = None
+        pretrain.trainer.enable_checkpointing = False
+
+        pretrain.trainer.log_every_n_steps = 1
+
+        pretrain.trainer.callbacks.append(
+            run.Config(
+                FLOPsMeasurementCallback,
+                model_name="nemotron4-340b",
+                model_config=pretrain.model.config,
+                data_config=pretrain.data,
+            )
+        )
+
+        dllogger_config = run.Config(
+            DLLogger,
+            verbose=True,
+            stdout=True,
+            json_file="dllogger.json",
+        )
+        pretrain.log.extra_loggers = [dllogger_config]
+
+        return pretrain
+
+
+    if __name__ == "__main__":
+        run.cli.main(llm.pretrain, default_factory=recipe)
+
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: mp-nemo-340b-cd
+spec:
+  numNodes: 0
+  channel:
+    resourceClaimTemplate:
+      name: mp-nemo-340b-cd-channel
+
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: mp-nemo340b
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+  - name: w
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 32
+        parallelism: 32
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              # Adjust NetworkAttachmentDefinition names to match your cluster (kubectl get net-attach-def)
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: nvidia.com/gpu.clique
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  jobset.sigs.k8s.io/jobset-name: mp-nemo340b
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+            # Optional: pin to specific nodes via label selector
+            # affinity:
+            #   nodeAffinity:
+            #     requiredDuringSchedulingIgnoredDuringExecution:
+            #       nodeSelectorTerms:
+            #       - matchExpressions:
+            #         - key: kubernetes.io/hostname
+            #           operator: In
+            #           values:
+            #           - node-01
+            #           - node-02
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:25.09
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: JOB_IDENTIFIER
+                value: mp-nemo340b
+              - name: MASTER_PORT
+                value: "6002"
+              - name: NNODES
+                value: "32"
+              - name: GPUS_PER_NODE
+                value: "4"
+              - name: NEMO_LAUNCH_SCRIPT
+                value: /workload/configs/nemotron4-340b-fp8.py
+              - name: FIXED_GBS
+                value: "256"
+              - name: EXPLICIT_LOG_DIR
+                value: workload_logs
+              - name: ARTIFACT_DIR
+                value: /tmp/artifacts
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                # Adjust to match your InfiniBand HCA devices (run: ibstat)
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                echo "Pod is assigned job index $JOB_COMPLETION_INDEX / $NNODES nodes"
+                JOBSET_NAME="mp-nemo340b"
+                MASTER_ADDR="${JOBSET_NAME}-w-0-0.${JOBSET_NAME}"
+                sleep 10
+
+                pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+
+                python ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=180 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0 \
+                  --to-yaml exported_nemo_config.yaml
+
+                echo "--- Exported NeMo config ---"
+                cat exported_nemo_config.yaml
+                echo "---"
+
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${JOB_COMPLETION_INDEX}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${NEMO_LAUNCH_SCRIPT} --factory "recipe()" \
+                  trainer.num_nodes="$NNODES" \
+                  log.explicit_log_dir="${EXPLICIT_LOG_DIR}" \
+                  trainer.max_steps=180 \
+                  trainer.devices="$GPUS_PER_NODE" \
+                  data.global_batch_size="$FIXED_GBS" \
+                  trainer.val_check_interval=1.0
+
+                if [[ "$JOB_COMPLETION_INDEX" == "0" ]]; then
+                  mkdir -p ${ARTIFACT_DIR}
+                  cp -r ${EXPLICIT_LOG_DIR}/* ${ARTIFACT_DIR}/ 2>/dev/null || true
+                  cp ${NEMO_LAUNCH_SCRIPT} ${ARTIFACT_DIR}/run-cli.py 2>/dev/null || true
+                  cp dllogger.json ${ARTIFACT_DIR}/dllogger.json 2>/dev/null || true
+                  cp exported_nemo_config.yaml ${ARTIFACT_DIR}/nemo-configuration.yaml 2>/dev/null || true
+                  env > ${ARTIFACT_DIR}/environ.txt 2>/dev/null || true
+                  echo "Artifacts saved to ${ARTIFACT_DIR}:"
+                  ls ${ARTIFACT_DIR}
+                fi
+
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mp-nemo-340b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mp-nemo-340b-config
+                items:
+                - key: nemotron4-340b-fp8.py
+                  path: nemotron4-340b-fp8.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+  successPolicy:
+    operator: All

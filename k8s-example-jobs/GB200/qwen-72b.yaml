@@ -1,0 +1,276 @@
+# Qwen2.5 72B BF16 pre-training on 64 GB200 GPUs using JobSet (1 rack, 16 nodes)
+# Uses: Megatron Bridge + JobSet + DRA (ComputeDomain) + torchrun
+#
+# Parallelism (16 nodes x 4 GPUs/node = 64 GPUs):
+#   TP=8   PP=4   CP=1   DP=2   SP=True   VP=n/a
+#   MBS=2  GBS=512  GA=128  SeqLen=4096  BF16
+#   No FSDP, No CPU offload
+#
+# Dense 72B model, recompute layernorm for GB200 memory efficiency
+#
+# Prerequisites:
+#   1. DRA GPU driver installed (gpu.nvidia.com device class)
+#   2. ComputeDomain controller running (for IMEX/NVLS multi-node NVLink)
+#   3. Network Operator with RDMA/InfiniBand support
+#
+# DNS names (from JobSet):
+#   mpiercy-qwen72b-w-0-{0..15}.mpiercy-qwen72b
+#
+# Usage:
+#   kubectl apply -f qwen-72b.yaml
+#   kubectl logs mpiercy-qwen72b-w-0-0 --follow   # master logs
+#
+# Cleanup:
+#   kubectl delete -f qwen-72b.yaml
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mpiercy-qwen72b-config
+data:
+  qwen25-72b-bf16.py: |
+    """Qwen2.5 72B BF16 pretraining on GB200 (16 nodes, 64 GPUs, single rack).
+
+    Parallelism: TP=8  PP=4  CP=1  DP=2  SP=True
+    MBS=2  GBS=512  GA=128  SeqLen=4096
+    BF16 mixed precision, recompute layernorm
+    """
+
+    import os
+    import torch
+
+    from megatron.bridge.recipes import qwen25_72b_pretrain_config
+    from megatron.bridge.training.gpt_step import forward_step
+    from megatron.bridge.training.pretrain import pretrain
+
+
+    def main() -> None:
+        cfg = qwen25_72b_pretrain_config()
+
+        cfg.model.tensor_model_parallel_size = 8
+        cfg.model.pipeline_model_parallel_size = 4
+        cfg.model.pipeline_dtype = torch.bfloat16
+        cfg.model.virtual_pipeline_model_parallel_size = None
+        cfg.model.context_parallel_size = 1
+        cfg.model.sequence_parallel = True
+        cfg.model.seq_length = 4096
+
+        cfg.train.train_iters = 2000
+        cfg.train.global_batch_size = 512
+        cfg.train.micro_batch_size = 2
+        cfg.train.manual_gc = True
+        cfg.train.manual_gc_interval = 5
+        cfg.train.manual_gc_eval = 5
+        cfg.logger.log_interval = 1
+
+        cfg.scheduler.lr_warmup_iters = 5
+
+        cfg.model.transformer_impl = "transformer_engine"
+
+        cfg.model.cuda_graph_impl = "none"
+        cfg.model.cuda_graph_scope = "full"
+        cfg.model.cuda_graph_warmup_steps = 3
+
+        cfg.model.attention_backend = None
+        cfg.model.cross_entropy_loss_fusion = True
+        cfg.model.cross_entropy_fusion_impl = "te"
+        cfg.model.apply_rope_fusion = True
+
+        cfg.model.recompute_granularity = "selective"
+        cfg.model.recompute_modules = ["layernorm"]
+        cfg.model.fine_grained_activation_offloading = False
+        cfg.model.offload_modules = None
+
+        cfg.optimizer.use_precision_aware_optimizer = False
+        cfg.optimizer.main_params_dtype = torch.float32
+        cfg.optimizer.main_grads_dtype = torch.float32
+        cfg.optimizer.exp_avg_dtype = torch.float32
+        cfg.optimizer.exp_avg_sq_dtype = torch.float32
+
+        cfg.ddp.overlap_grad_reduce = True
+        cfg.ddp.overlap_param_gather = True
+        cfg.ddp.check_for_nan_in_grad = True
+        cfg.ddp.use_distributed_optimizer = True
+        cfg.ddp.use_megatron_fsdp = False
+        cfg.ddp.grad_reduce_in_fp32 = False
+        cfg.ddp.average_in_collective = False
+        cfg.ddp.data_parallel_sharding_strategy = "no_shard"
+
+        cfg.checkpoint.save_interval = 0
+        cfg.checkpoint.save = None
+        cfg.checkpoint.load = None
+
+        world_size = int(os.getenv("WORLD_SIZE", "64"))
+        tp = cfg.model.tensor_model_parallel_size
+        pp = cfg.model.pipeline_model_parallel_size
+        dp = world_size // (tp * pp)
+
+        print("=" * 70)
+        print("Qwen2.5 72B BF16 Training")
+        print(f"  World Size: {world_size}")
+        print(f"  TP={tp}, PP={pp}, VP={cfg.model.virtual_pipeline_model_parallel_size}, "
+              f"CP={cfg.model.context_parallel_size}")
+        print(f"  SP={cfg.model.sequence_parallel}, DP={dp}")
+        print(f"  GBS={cfg.train.global_batch_size}, MBS={cfg.train.micro_batch_size}, "
+              f"GA={cfg.train.global_batch_size // (cfg.train.micro_batch_size * dp)}")
+        print(f"  SeqLen={cfg.model.seq_length}")
+        print(f"  Precision: BF16 mixed")
+        print(f"  Recompute: {cfg.model.recompute_modules}")
+        print(f"  Train Iters: {cfg.train.train_iters}")
+        print("=" * 70)
+
+        pretrain(config=cfg, forward_step_func=forward_step)
+
+
+    if __name__ == "__main__":
+        main()
+
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: mpiercy-qwen72b-cd
+spec:
+  numNodes: 0
+  channel:
+    resourceClaimTemplate:
+      name: mpiercy-qwen72b-cd-channel
+
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: mpiercy-qwen72b
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+  - name: w
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 16
+        parallelism: 16
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+              # Adjust NetworkAttachmentDefinition names to match your cluster (kubectl get net-attach-def)
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              # Replace with your clique ID (run: kubectl get nodes -L nvidia.com/gpu.clique)
+              nvidia.com/gpu.clique: "<YOUR_CLIQUE_ID>"
+            topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: nvidia.com/gpu.clique
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  jobset.sigs.k8s.io/jobset-name: mpiercy-qwen72b
+            # Optional: pin to specific nodes via label selector
+            # affinity:
+            #   nodeAffinity:
+            #     requiredDuringSchedulingIgnoredDuringExecution:
+            #       nodeSelectorTerms:
+            #       - matchExpressions:
+            #         - key: kubernetes.io/hostname
+            #           operator: In
+            #           values:
+            #           - node-01
+            #           - node-02
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:26.02
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: MASTER_PORT
+                value: "6002"
+              - name: WORLD_SIZE
+                value: "64"
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_IB_HCA
+                # Adjust to match your InfiniBand HCA devices (run: ibstat)
+                value: "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                echo "Pod is assigned job index $JOB_COMPLETION_INDEX / 16 nodes"
+
+                JOBSET_NAME="mpiercy-qwen72b"
+                MASTER_ADDR="${JOBSET_NAME}-w-0-0.${JOBSET_NAME}"
+                NNODES=16
+                GPUS_PER_NODE=4
+                TRAIN_SCRIPT=/workload/configs/qwen25-72b-bf16.py
+                sleep 10
+
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${JOB_COMPLETION_INDEX}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${TRAIN_SCRIPT}
+
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                limits:
+                  nvidia.com/gpu: 4
+                  rdma/rdma_shared_device_a: 1
+                  rdma/rdma_shared_device_b: 1
+                  rdma/rdma_shared_device_c: 1
+                  rdma/rdma_shared_device_d: 1
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: mpiercy-qwen72b-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: mpiercy-qwen72b-config
+                items:
+                - key: qwen25-72b-bf16.py
+                  path: qwen25-72b-bf16.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+  successPolicy:
+    operator: All
