@@ -1,0 +1,76 @@
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: nccl-1n-r07-08
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+  - name: w
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 1
+        parallelism: 1
+        template:
+          spec:
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+            # Pin to r07-08. Single-node intra-NVLink test only — no ComputeDomain,
+            # no DRA channel claim, no IB/RDMA. Bypasses the DRA/IMEX path entirely
+            # so the test runs even if the DRA driver state is degraded on this node.
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                      - 3209e979-r07-08.cloud.together.ai
+            tolerations:
+            - key: "together.ai/acceptance"
+              operator: "Equal"
+              value: "true"
+              effect: "NoSchedule"
+            containers:
+            - name: nccl-test
+              image: nvcr.io/nvidia/pytorch:26.02-py3
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: NCCL_DEBUG
+                value: "INFO"
+              - name: NCCL_NVLS_ENABLE
+                value: "1"
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -ex
+
+                echo "Host: $(hostname)"
+                nvidia-smi -L
+
+                echo "--- Running single-node all_reduce_perf on 4 GPUs (NVLink only, no DRA/IMEX) ---"
+                all_reduce_perf -b 128M -e 32G -f 2 -c 0 -n 200 -g 4
+                echo "--- test complete ---"
+              resources:
+                requests:
+                  nvidia.com/gpu: '4'
+                limits:
+                  nvidia.com/gpu: '4'
+              volumeMounts:
+              - name: dshm
+                mountPath: /dev/shm
+            volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 32Gi
+  successPolicy:
+    operator: All

@@ -1,0 +1,106 @@
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: nccl-1n-r07-06-cd
+spec:
+  numNodes: 0
+  channel:
+    resourceClaimTemplate:
+      name: nccl-1n-r07-06-cd-channel
+
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: nccl-1n-r07-06
+  annotations:
+    k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+  - name: w
+    replicas: 1
+    template:
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 1
+        parallelism: 1
+        template:
+          metadata:
+            annotations:
+              k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
+          spec:
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              feature.node.kubernetes.io/rdma.capable: "true"
+              nvidia.com/gpu.clique: "36d8bca1-2323-4a1a-bcb9-cf673591464d.32766"
+            # Pin to r07-06 — the node flagged as bad by the 17n test.
+            # Single-node 4-GPU all_reduce stays on NVLink; isolates intra-node health from IB fabric.
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                      - 3209e979-r07-06.cloud.together.ai
+            tolerations:
+            - key: "together.ai/acceptance"
+              operator: "Equal"
+              value: "true"
+              effect: "NoSchedule"
+            containers:
+            - name: nccl-test
+              image: nvcr.io/nvidia/pytorch:26.02-py3
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: NCCL_DEBUG
+                value: "INFO"
+              - name: NCCL_NVLS_ENABLE
+                value: "1"
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -ex
+
+                echo "Host: $(hostname)"
+                nvidia-smi -L
+
+                echo "--- Running single-node all_reduce_perf on 4 GPUs (NVLink only) ---"
+                all_reduce_perf -b 128M -e 32G -f 2 -c 0 -n 200 -g 4
+                echo "--- test complete ---"
+              resources:
+                requests:
+                  nvidia.com/gpu: '4'
+                  rdma/rdma_shared_device_a: '1'
+                  rdma/rdma_shared_device_b: '1'
+                  rdma/rdma_shared_device_c: '1'
+                  rdma/rdma_shared_device_d: '1'
+                limits:
+                  nvidia.com/gpu: '4'
+                  rdma/rdma_shared_device_a: '1'
+                  rdma/rdma_shared_device_b: '1'
+                  rdma/rdma_shared_device_c: '1'
+                  rdma/rdma_shared_device_d: '1'
+                claims:
+                - name: compute-domain-channel
+              volumeMounts:
+              - name: dshm
+                mountPath: /dev/shm
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: nccl-1n-r07-06-cd-channel
+            volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 32Gi
+  successPolicy:
+    operator: All
