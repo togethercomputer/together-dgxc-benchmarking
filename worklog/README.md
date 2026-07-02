@@ -33,6 +33,7 @@ Engineering notes, analysis reports, and profiler findings from B200 cluster opt
 | May 11 | `2026-05-11_flapping_airplanes_512gpu_benchmark_report.md` | First full-cluster 512-GPU LLM sweep (8 workloads) |
 | May 12 | `2026-05-12_flapping_airplanes_256gpu_benchmark_report.md` | Post-SHARP-abort 256-GPU recovery run (7/8 valid) |
 | May 22 | `2026-05-22_rack07_readiness_report.md` | GB200 R07 readiness + per-node + 17n + 16n-with-r07-08 re-runs: r07-06 NVLink degraded (−26%); r07-08 cleared (GPT-OSS 16n incl. r07-08 = 396.6 matches 397 baseline) |
+| Jul 1 | `2026-07-01_rack01_readiness_report.md` | GB200 R01 readiness ×2: NCCL 18n 914.9, GPT-OSS 120B 402.0 (above baseline), Qwen 72B 700.3 (reproducibly ~5% soft vs R07/R08 — per-rack, fabric-clean). Verdict READY w/ Qwen caveat |
 | —     | `template_256gpu_benchmark_report.md` | Template for new N-GPU sweep reports |
 
 ## Profiler Reports
