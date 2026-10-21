@@ -13,8 +13,8 @@ dependencies = [
     "questionary>=1.10.0",
     "rich>=13.0",
     "prompt_toolkit<3.0.52",
-    "transformers>4.57.3,<5.0.0",
-    "huggingface-hub>=0.20.0",
+    "transformers>4.57.3,<6",
+    "huggingface-hub>=1.0.0,<2",
 ]
 
 [project.scripts]
