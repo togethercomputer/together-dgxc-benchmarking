@@ -14,6 +14,8 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: nccl-1n-r07-06
+  labels:
+    username: johnson
   annotations:
     k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
 spec:
@@ -24,6 +26,9 @@ spec:
   - name: w
     replicas: 1
     template:
+      metadata:
+        labels:
+          username: johnson
       spec:
         backoffLimit: 0
         completionMode: Indexed
@@ -31,6 +36,8 @@ spec:
         parallelism: 1
         template:
           metadata:
+            labels:
+              username: johnson
             annotations:
               k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
           spec:
@@ -53,6 +60,10 @@ spec:
             - key: "together.ai/acceptance"
               operator: "Equal"
               value: "true"
+              effect: "NoSchedule"
+            - key: "together.ai/benchmark"
+              operator: "Equal"
+              value: "johnson"
               effect: "NoSchedule"
             containers:
             - name: nccl-test

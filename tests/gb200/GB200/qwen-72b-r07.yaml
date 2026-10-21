@@ -117,6 +117,8 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: qwen72b-r07
+  labels:
+    username: johnson
 spec:
   network:
     enableDNSHostnames: true
@@ -125,6 +127,9 @@ spec:
   - name: w
     replicas: 1
     template:
+      metadata:
+        labels:
+          username: johnson
       spec:
         backoffLimit: 0
         completionMode: Indexed
@@ -134,6 +139,8 @@ spec:
         ttlSecondsAfterFinished: 43200
         template:
           metadata:
+            labels:
+              username: johnson
             annotations:
               kubectl.kubernetes.io/default-container: workload
               k8s.v1.cni.cncf.io/networks: ipoib-rdma-shared-device-default-a-su-1,ipoib-rdma-shared-device-default-b-su-1,ipoib-rdma-shared-device-default-c-su-1,ipoib-rdma-shared-device-default-d-su-1
@@ -154,12 +161,18 @@ spec:
                     - key: kubernetes.io/hostname
                       operator: NotIn
                       values:
-                      - 3209e979-r07-06.cloud.together.ai
-                      - 3209e979-r07-08.cloud.together.ai
+                      # r07-15 auto-excluded (lost clique label, NotReady). Drop one healthy
+                      # spare to fit 16 nodes; r07-06 (reimaged, re-verified 690 GB/s) and
+                      # r07-08 (cleared) are both included.
+                      - 3209e979-r07-17.cloud.together.ai
             tolerations:
             - key: "together.ai/acceptance"
               operator: "Equal"
               value: "true"
+              effect: "NoSchedule"
+            - key: "together.ai/benchmark"
+              operator: "Equal"
+              value: "johnson"
               effect: "NoSchedule"
             topologySpreadConstraints:
             - maxSkew: 1
