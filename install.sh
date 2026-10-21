@@ -31,7 +31,7 @@ set -eu -o pipefail
 # Configuration
 readonly MIN_PYTHON_VERSION="3.12"
 readonly RECOMMENDED_PYTHON_VERSION="3.12"
-readonly PINNED_UV_VERSION="0.9.28"
+readonly PINNED_UV_VERSION="0.13.4"
 
 # Welcome banner
 echo "════════════════════════════════════════════════════════════════════"
