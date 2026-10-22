@@ -1,0 +1,12 @@
+# CVE-2026-111943: fixed CA bundle (Alpine 3.23 ca-certificates-bundle 20261020-r0),
+# mounted over /etc/ssl/certs/ca-certificates.crt in the server and client pods
+# until the vLLM/SGLang/Triton images ship a fixed ca-certificates package.
+{{- if .Values.fixedCaBundle.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-fixed-ca-bundle
+data:
+  ca-certificates.crt: |-
+{{ .Files.Get "files/ca-certificates.crt" | indent 4 }}
+{{- end }}
