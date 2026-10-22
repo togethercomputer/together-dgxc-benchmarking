@@ -402,6 +402,7 @@ Model download could take 10-15 mins.
 ```bash
 # Deploy configuration, model, and services
 kubectl apply -n $NAMESPACE -f config.yaml
+kubectl apply -n $NAMESPACE -f ca-bundle.yaml  # fixed CA bundle (CVE-2026-111943)
 kubectl apply -n $NAMESPACE -f deploy.yaml
 yq e '.metadata.namespace = $NAMESPACE' -i service.yaml
 kubectl apply -f service.yaml
@@ -801,7 +802,7 @@ kubectl top nodes
 
 ```bash
 # Delete GPT-OSS deployment
-kubectl delete -f config.yaml -f deploy.yaml -f service.yaml -f frontend-service.yaml
+kubectl delete -f config.yaml -f ca-bundle.yaml -f deploy.yaml -f service.yaml -f frontend-service.yaml
 
 # Delete benchmark job
 kubectl delete -f bench.yaml
