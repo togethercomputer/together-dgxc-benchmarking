@@ -38,6 +38,80 @@ from llmb_install.environment.detector import (
 )
 
 
+# CVE-2026-111943: the vendor images pinned by the recipes ship a ca-certificates
+# package that still trusts the compromised emSign CA. After `enroot import`, the
+# image is unpacked, ca-certificates is upgraded from the distro security repo
+# and the image is re-exported. The job fails if the package is still too old.
+# Set LLMB_SKIP_CA_UPGRADE=1 to skip this (e.g. clusters without package-repo access).
+CA_UPGRADE_MARKER_SUFFIX = ".ca-upgraded"
+
+_CA_UPGRADE_IN_CONTAINER = r"""
+set -e
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -o APT::Sandbox::User=root update
+  apt-get -o APT::Sandbox::User=root install -y --only-upgrade ca-certificates
+  rm -rf /var/lib/apt/lists/*
+  . /etc/os-release
+  case "$ID:$VERSION_ID" in
+    ubuntu:*) min="20260816~" ;;
+    debian:12) min="20250419~deb12u2" ;;
+    debian:13) min="20250419+deb13u1" ;;
+    *) min="" ;;
+  esac
+  ver=$(dpkg-query -W -f='${Version}' ca-certificates)
+  if [ -n "$min" ] && ! dpkg --compare-versions "$ver" ge "$min"; then
+    echo "ca-certificates $ver is older than $min (CVE-2026-111943)" >&2
+    exit 1
+  fi
+elif command -v apk >/dev/null 2>&1; then
+  apk upgrade --no-cache ca-certificates
+  ver=$(apk info -e -v ca-certificates | sed 's/^ca-certificates-//')
+  if [ "$(apk version -t "$ver" 20261020-r0)" = "<" ]; then
+    echo "ca-certificates $ver is older than 20261020-r0 (CVE-2026-111943)" >&2
+    exit 1
+  fi
+elif command -v dnf >/dev/null 2>&1; then
+  dnf -y update ca-certificates && update-ca-trust
+elif command -v microdnf >/dev/null 2>&1; then
+  microdnf -y update ca-certificates && update-ca-trust
+elif command -v yum >/dev/null 2>&1; then
+  yum -y update ca-certificates && update-ca-trust
+fi
+"""
+
+# Args: $1 output sqsh, $2 image URL ("" to upgrade an existing $1), $3 architecture,
+# $4 in-container upgrade script, $5 "1" to skip the upgrade.
+_IMPORT_AND_UPGRADE_SCRIPT = r"""
+set -euo pipefail
+OUT="$1"; URL="$2"; ARCH="$3"; UPGRADE="$4"; SKIP_UPGRADE="$5"
+NAME="llmb-ca-upgrade-$(hostname -s)-$$"
+SRC="$OUT"
+cleanup() {
+  enroot remove -f "$NAME" >/dev/null 2>&1 || true
+  rm -f "$OUT.new.$$"
+  if [ -n "$URL" ]; then rm -f "$OUT.raw.$$"; fi
+}
+trap cleanup EXIT
+if [ -n "$URL" ]; then
+  SRC="$OUT.raw.$$"
+  if [ -n "$ARCH" ]; then
+    enroot import -o "$SRC" -a "$ARCH" "docker://$URL"
+  else
+    enroot import -o "$SRC" "docker://$URL"
+  fi
+fi
+if [ "$SKIP_UPGRADE" = "1" ]; then
+  if [ "$SRC" != "$OUT" ]; then mv -f "$SRC" "$OUT"; fi
+  exit 0
+fi
+enroot create -n "$NAME" "$SRC"
+enroot start --root --rw "$NAME" /bin/sh -c "$UPGRADE"
+enroot export -o "$OUT.new.$$" "$NAME"
+mv -f "$OUT.new.$$" "$OUT"
+"""
+
+
 def is_enroot_installed() -> bool:
     """Check if Enroot is installed and available in the system PATH.
 
@@ -181,13 +255,25 @@ def fetch_container_images(
         try:
             source_sqsh_file = os.path.join(source_images_dir, filename)
 
-            if os.path.exists(source_sqsh_file):
+            ca_marker = source_sqsh_file + CA_UPGRADE_MARKER_SUFFIX
+            skip_ca_upgrade = os.environ.get("LLMB_SKIP_CA_UPGRADE", "0") == "1"
+            if os.path.exists(source_sqsh_file) and (skip_ca_upgrade or os.path.exists(ca_marker)):
                 print(f"Skipping {image_url} -- {source_sqsh_file} - file already exists.")
             else:
-                cmd_args = ["enroot", "import", "-o", source_sqsh_file]
-                if node_architecture:
-                    cmd_args.extend(["-a", node_architecture])
-                cmd_args.append(f"docker://{image_url}")
+                # Import (unless an older sqsh already exists) and upgrade ca-certificates in one job,
+                # so both steps run on the same node.
+                import_url = "" if os.path.exists(source_sqsh_file) else image_url
+                cmd_args = [
+                    "bash",
+                    "-c",
+                    _IMPORT_AND_UPGRADE_SCRIPT,
+                    "llmb-image-import",
+                    source_sqsh_file,
+                    import_url,
+                    node_architecture or "",
+                    _CA_UPGRADE_IN_CONTAINER,
+                    "1" if skip_ca_upgrade else "0",
+                ]
 
                 if install_method == 'slurm':
                     # Validate required SLURM configuration fields
@@ -204,7 +290,7 @@ def fetch_container_images(
                         f"--account={account}",
                         f"--partition={cpu_partition}",
                         "-t",
-                        "35",
+                        "90",
                         "--exclusive",
                         "--pty",
                     ]
@@ -212,14 +298,17 @@ def fetch_container_images(
                         srun_args.append(f"--gpus-per-node={slurm_info['slurm']['cpu_partition_gres']}")
 
                     full_cmd_args = srun_args + cmd_args
-                    print(f"Submitting download via SLURM: {' '.join(full_cmd_args)}")
+                    print(f"Submitting download via SLURM: {' '.join(srun_args)} enroot import docker://{image_url}")
                 else:
                     full_cmd_args = cmd_args
-                    print(f"Downloading {image_url} locally: {' '.join(full_cmd_args)}")
+                    print(f"Downloading {image_url} locally to {source_sqsh_file}")
                     clean_env = None  # Don't use clean env for local execution
 
                 try:
                     subprocess.run(full_cmd_args, check=True, text=True, env=clean_env)
+                    if not skip_ca_upgrade:
+                        with open(ca_marker, "w") as marker:
+                            marker.write("ca-certificates upgraded (CVE-2026-111943)\n")
                     print(f"Successfully downloaded {source_sqsh_file}\n")
                 except subprocess.CalledProcessError as e:
                     print(f"Error: Failed to download {source_sqsh_file}: {str(e)}\n")

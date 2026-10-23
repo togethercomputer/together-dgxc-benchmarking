@@ -59,6 +59,18 @@ spec:
           - /bin/sh
           - -c
           image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1-rc0.pre3
+          env:
+          - name: SSL_CERT_FILE
+            value: "/etc/ssl/certs/ca-certificates.crt"
+          volumeMounts:
+          - mountPath: /etc/ssl/certs/ca-certificates.crt
+            name: fixed-ca-bundle
+            subPath: ca-certificates.crt
+            readOnly: true
+        volumes:
+        - configMap:
+            name: fixed-ca-bundle
+          name: fixed-ca-bundle
       replicas: 1
     TrtllmWorker:
       componentType: main
@@ -116,9 +128,15 @@ spec:
             value: "/model-store/hub/models--openai--gpt-oss-120b/snapshots/b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
           - name: TLLM_LOG_LEVEL
             value: "INFO"
+          - name: SSL_CERT_FILE
+            value: "/etc/ssl/certs/ca-certificates.crt"
           volumeMounts:
           - mountPath: /opt/dynamo/configs
             name: llm-config
+            readOnly: true
+          - mountPath: /etc/ssl/certs/ca-certificates.crt
+            name: fixed-ca-bundle
+            subPath: ca-certificates.crt
             readOnly: true
           workingDir: /workspace/components/backends/trtllm
         tolerations:
@@ -134,6 +152,9 @@ spec:
         - configMap:
             name: llm-config
           name: llm-config
+        - configMap:
+            name: fixed-ca-bundle
+          name: fixed-ca-bundle
       replicas: 1
       resources:
         limits:

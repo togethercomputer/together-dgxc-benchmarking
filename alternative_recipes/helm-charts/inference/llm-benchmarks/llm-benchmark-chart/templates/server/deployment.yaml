@@ -41,9 +41,22 @@ spec:
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       {{- end }}
+      {{- if .Values.fixedCaBundle.enabled }}
+      volumes:
+      - name: fixed-ca-bundle
+        configMap:
+          name: {{ .Release.Name }}-fixed-ca-bundle
+      {{- end }}
       containers:
       - name: target-application-server
         image: {{ .Values.environment.SERVER_IMAGE }}
+        {{- if .Values.fixedCaBundle.enabled }}
+        volumeMounts:
+        - name: fixed-ca-bundle
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          subPath: ca-certificates.crt
+          readOnly: true
+        {{- end }}
         ports:
         - containerPort: {{ .Values.environment.SERVER_PORT | int }}
         {{- if eq .Values.environment.SERVER_TYPE "SGLang" }}
@@ -70,6 +83,10 @@ spec:
         {{- end }}
         {{- end }}
         env:
+        {{- if .Values.fixedCaBundle.enabled }}
+        - name: SSL_CERT_FILE
+          value: /etc/ssl/certs/ca-certificates.crt
+        {{- end }}
         {{- if eq .Values.environment.SERVER_TYPE "NIM" }}
         - name: NGC_API_KEY
           valueFrom:

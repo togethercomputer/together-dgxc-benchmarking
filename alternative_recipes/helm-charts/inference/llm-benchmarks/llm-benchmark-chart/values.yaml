@@ -55,6 +55,11 @@ serviceAccount:
 
 # Tolerations for pod scheduling
 tolerations: []
+
+# CVE-2026-111943: mount a fixed CA bundle (files/ca-certificates.crt) over the
+# images' /etc/ssl/certs/ca-certificates.crt until they ship fixed ca-certificates.
+fixedCaBundle:
+  enabled: true
 # Example tolerations:
 # - key: "dedicated"
 #   operator: "Equal"

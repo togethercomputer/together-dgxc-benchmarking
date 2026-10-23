@@ -36,20 +36,35 @@ spec:
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       {{- end }}
-      {{- if .Values.environment.RESULTS_PATH }}
+      {{- if or .Values.environment.RESULTS_PATH .Values.fixedCaBundle.enabled }}
       volumes:
+      {{- if .Values.environment.RESULTS_PATH }}
       - name: results-volume
         hostPath:
           path: {{ .Values.environment.RESULTS_PATH }}
           type: DirectoryOrCreate
       {{- end }}
+      {{- if .Values.fixedCaBundle.enabled }}
+      - name: fixed-ca-bundle
+        configMap:
+          name: {{ .Release.Name }}-fixed-ca-bundle
+      {{- end }}
+      {{- end }}
       containers:
       - name: benchmarking-client
         image: {{ .Values.environment.BENCHMARK_SERVER_IMAGE }}
-        {{- if .Values.environment.RESULTS_PATH }}
+        {{- if or .Values.environment.RESULTS_PATH .Values.fixedCaBundle.enabled }}
         volumeMounts:
+        {{- if .Values.environment.RESULTS_PATH }}
         - name: results-volume
           mountPath: {{ .Values.environment.RESULTS_PATH }}
+        {{- end }}
+        {{- if .Values.fixedCaBundle.enabled }}
+        - name: fixed-ca-bundle
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          subPath: ca-certificates.crt
+          readOnly: true
+        {{- end }}
         {{- end }}
         command: ["sh", "-c"]
         args:
@@ -191,6 +206,10 @@ spec:
             sleep ${COMPLETION_DELAY:-60}
 
         env:
+        {{- if .Values.fixedCaBundle.enabled }}
+        - name: SSL_CERT_FILE
+          value: /etc/ssl/certs/ca-certificates.crt
+        {{- end }}
         - name: SERVER_HEALTH_CHECK_ENDPOINT
           value: {{ .Values.environment.SERVER_HEALTH_CHECK_ENDPOINT | quote }}
         - name: SERVER_ENDPOINT
