@@ -90,4 +90,4 @@ Mean **314.9**, run-to-run 0.06%. Occasional single-step dips to ~273 (8.1 s; GC
 - **Re-run** this suite after any fix (`c66-tools/run_campaign.sh`; NCCL first — target ≥ ~915 GB/s at full rack, ≥ ~690 single-node).
 - **Reservation**: still in place. Release via the rollback in `c66-tools/reserve/apply.sh` — but note its last step deletes namespace `infra-perf` (and the `hf-token` / `nccl-ssh-keys` secrets).
 
-Run artifacts (uncommitted, in `~/`): `nccl-c66-12n.log`, `nccl-c66-12n-2509.log`, `qwen-c66-run{1,2}.log`, `gpt-oss-c66-run{1,2}.log`, `gb200-661303b8/campaign.log`.
+Run logs (committed): `tests/gb200/logs/{nccl-c66-12n,nccl-c66-12n-2509,qwen-c66-run1,qwen-c66-run2,gpt-oss-c66-run1,gpt-oss-c66-run2,campaign-c66}.log`.

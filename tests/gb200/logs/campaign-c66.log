@@ -1,0 +1,16 @@
+[18:56:39] qwen72b-c66 reached 96 steps
+  last-30 median TFLOP/s/GPU = 607.6
+[18:56:51] launch qwen72b-c66 -> /home/johnson/qwen-c66-run2.log
+[19:36:38] qwen72b-c66 reached 95 steps
+  last-30 median TFLOP/s/GPU = 608.5
+[19:36:49] launch gptoss-c66 -> /home/johnson/gpt-oss-c66-run1.log
+[19:49:57] gptoss-c66 reached 95 steps
+  last-30 median TFLOP/s/GPU = 314.8
+[19:50:09] launch gptoss-c66 -> /home/johnson/gpt-oss-c66-run2.log
+[20:03:16] gptoss-c66 reached 95 steps
+  last-30 median TFLOP/s/GPU = 315.0
+[20:03:28] launch nccl-12n-c66-2509 -> /home/johnson/nccl-c66-12n-2509.log
+[20:07:10] nccl-12n-c66-2509 rank0 Succeeded
+  32GiB busbw(oop)=662.96 algbw=338.53
+# Avg bus bandwidth    : 562.894 
+[20:07:42] CAMPAIGN DONE
