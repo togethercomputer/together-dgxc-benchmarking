@@ -35,6 +35,7 @@ Engineering notes, analysis reports, and profiler findings from B200 cluster opt
 | May 22 | `2026-05-22_rack07_readiness_report.md` | GB200 R07 readiness + per-node + 17n + 16n-with-r07-08 re-runs: r07-06 NVLink degraded (−26%); r07-08 cleared (GPT-OSS 16n incl. r07-08 = 396.6 matches 397 baseline) |
 | Jul 1 | `2026-07-01_rack01_readiness_report.md` | GB200 R01 readiness ×2: NCCL 18n 914.9, GPT-OSS 120B 402.0 (above baseline), Qwen 72B 700.3 (reproducibly ~5% soft vs R07/R08 — per-rack, fabric-clean). Verdict READY w/ Qwen caveat |
 | Jul 13 | `2026-07-13_rack07_readiness_report.md` | GB200 R07 re-readiness after maintenance: r07-06 NVLink FIXED (690.8, was 513), NCCL 17n 928.2, GPT-OSS 120B 408.5 (above baseline), Qwen 72B 723.0 (fabric-clean). r07-15 down (host fault, excluded/flagged). Verdict READY |
+| Nov 3 | `2026-11-03_661303b8_readiness_report.md` | GB200 cluster 661303b8 (12-node partial rack, infra-perf) readiness: NCCL 12n 661 GB/s (−28%, identical on pytorch 25.09 → not container stack), every node single-node NVLink 515 (vs 690), Qwen 72B 608.1 (8n), GPT-OSS 120B 314.9 (8n). Cluster-wide NVLink deficit with fabric reporting Healthy/Full. Verdict NOT READY — escalate |
 | —     | `template_256gpu_benchmark_report.md` | Template for new N-GPU sweep reports |
 
 ## Profiler Reports

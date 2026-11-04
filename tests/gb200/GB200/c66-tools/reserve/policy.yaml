@@ -1,0 +1,37 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: reserved-for-infra-perf
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+  variables:
+  - name: tols
+    expression: "has(object.spec.tolerations) ? object.spec.tolerations : []"
+  - name: systemNs
+    expression: "['kube-system','nvidia-gpu-operator','nvidia-dra-driver-gpu','nvsentinel']"
+  validations:
+  # Only namespace 'infra-perf' may tolerate the reserved-for taint.
+  - expression: >-
+      object.metadata.namespace == 'infra-perf' ||
+      !variables.tols.exists(t, has(t.key) && t.key == 'reserved-for')
+    message: "Only pods in namespace 'infra-perf' may tolerate the reserved-for taint (GPU nodes 661303b8-*)."
+  # Tolerate-all (operator Exists, no key) is only allowed in system namespaces.
+  - expression: >-
+      object.metadata.namespace == 'infra-perf' ||
+      object.metadata.namespace in variables.systemNs ||
+      !variables.tols.exists(t, (!has(t.key) || t.key == '') && has(t.operator) && t.operator == 'Exists')
+    message: "Tolerate-all tolerations are only allowed in system namespaces; the GPU nodes are reserved for namespace 'infra-perf'."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: reserved-for-infra-perf
+spec:
+  policyName: reserved-for-infra-perf
+  validationActions: ["Deny"]

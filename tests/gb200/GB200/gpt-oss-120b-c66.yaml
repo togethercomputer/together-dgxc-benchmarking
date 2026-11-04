@@ -1,0 +1,272 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: infra-perf
+  name: gptoss-c66-config
+data:
+  gpt-oss-120b-bf16.py: |
+    """GPT-OSS 120B BF16 pretraining on GB200 (16 nodes, 64 GPUs, single rack).
+
+    Parallelism: TP=1  PP=1  CP=1  EP=32  DP=32  ETP=1
+    MBS=4  GBS=1280  GA=5  SeqLen=4096
+    BF16 mixed precision, recompute layernorm + moe_act
+    """
+
+    import os
+    import torch
+
+    from megatron.bridge.recipes import gpt_oss_120b_pretrain_config
+    from megatron.bridge.training.comm_overlap import CommOverlapConfig
+    from megatron.bridge.training.flex_dispatcher_backend import apply_flex_dispatcher_backend
+    from megatron.bridge.training.gpt_step import forward_step
+    from megatron.bridge.training.pretrain import pretrain
+
+
+    def main() -> None:
+        cfg = gpt_oss_120b_pretrain_config()
+
+        # Parallelism / core training config
+        cfg.model.tensor_model_parallel_size = 1
+        cfg.model.pipeline_model_parallel_size = 1
+        cfg.model.context_parallel_size = 1
+        cfg.model.expert_model_parallel_size = 32
+        cfg.model.sequence_parallel = False
+        cfg.model.seq_length = 4096
+
+        cfg.train.train_iters = 1000
+        cfg.train.global_batch_size = 640
+        cfg.train.micro_batch_size = 4
+        cfg.scheduler.lr_warmup_iters = 2
+        cfg.checkpoint.save_interval = 0
+
+        cfg.comm_overlap = CommOverlapConfig(tp_comm_overlap=False)
+
+        cfg.model.pipeline_dtype = torch.bfloat16
+        cfg.model.virtual_pipeline_model_parallel_size = None
+        cfg.model.expert_tensor_parallel_size = 1
+        cfg.model.cp_comm_type = "a2a"
+        cfg.model.account_for_embedding_in_pipeline_split = False
+        cfg.model.account_for_loss_in_pipeline_split = False
+        cfg.model.calculate_per_token_loss = True
+
+        cfg.model.moe_token_dispatcher_type = "alltoall"
+        cfg.model.moe_flex_dispatcher_backend = "deepep"
+        cfg.model.moe_hybridep_num_sms = 16
+
+        cfg.train.manual_gc = True
+        cfg.train.manual_gc_interval = 5
+        cfg.train.manual_gc_eval = 5
+        cfg.logger.log_interval = 1
+
+        cfg.model.transformer_impl = "transformer_engine"
+
+        cfg.model.cuda_graph_impl = "none"
+        cfg.model.cuda_graph_scope = "full"
+        cfg.model.cuda_graph_warmup_steps = 3
+
+        cfg.model.attention_backend = None
+        cfg.model.moe_router_fusion = True
+        cfg.model.moe_router_force_load_balancing = True
+        cfg.model.moe_permute_fusion = True
+        cfg.model.moe_grouped_gemm = True
+        cfg.model.cross_entropy_loss_fusion = True
+        cfg.model.cross_entropy_fusion_impl = "te"
+        cfg.model.apply_rope_fusion = True
+
+        cfg.model.recompute_granularity = "selective"
+        cfg.model.recompute_modules = ["layernorm", "moe_act"]
+        cfg.model.fine_grained_activation_offloading = False
+        cfg.model.offload_modules = None
+
+        cfg.model.moe_router_padding_for_fp8 = False
+
+        cfg.optimizer.use_precision_aware_optimizer = False
+        cfg.optimizer.main_params_dtype = torch.float32
+        cfg.optimizer.main_grads_dtype = torch.float32
+        cfg.optimizer.exp_avg_dtype = torch.float32
+        cfg.optimizer.exp_avg_sq_dtype = torch.float32
+
+        cfg.comm_overlap.delay_wgrad_compute = False
+        cfg.comm_overlap.overlap_moe_expert_parallel_comm = False
+        cfg.model.moe_shared_expert_overlap = False
+
+        cfg.checkpoint.save = None
+        cfg.checkpoint.load = None
+
+        cfg.ddp.overlap_grad_reduce = True
+        cfg.ddp.overlap_param_gather = True
+        cfg.ddp.check_for_nan_in_grad = True
+        cfg.ddp.use_distributed_optimizer = True
+        cfg.ddp.use_megatron_fsdp = False
+        cfg.ddp.grad_reduce_in_fp32 = False
+        cfg.ddp.average_in_collective = False
+        cfg.ddp.data_parallel_sharding_strategy = "no_shard"
+
+        apply_flex_dispatcher_backend(cfg.model, cfg.model.moe_flex_dispatcher_backend)
+
+        world_size = int(os.getenv("WORLD_SIZE", "32"))
+        tp = cfg.model.tensor_model_parallel_size
+        pp = cfg.model.pipeline_model_parallel_size
+        dp = world_size // (tp * pp)
+
+        print("=" * 70)
+        print("GPT-OSS 120B BF16 Training")
+        print(f"  World Size: {world_size}")
+        print(f"  TP={tp}, PP={pp}, VP={cfg.model.virtual_pipeline_model_parallel_size}, "
+              f"CP={cfg.model.context_parallel_size}")
+        print(f"  EP={cfg.model.expert_model_parallel_size}, ETP={cfg.model.expert_tensor_parallel_size}, DP={dp}")
+        print(f"  GBS={cfg.train.global_batch_size}, MBS={cfg.train.micro_batch_size}, GA={cfg.train.global_batch_size // (cfg.train.micro_batch_size * dp)}")
+        print(f"  SeqLen={cfg.model.seq_length}")
+        print(f"  Precision: BF16 mixed")
+        print(f"  Recompute: {cfg.model.recompute_modules}")
+        print(f"  Train Iters: {cfg.train.train_iters}")
+        print("=" * 70)
+
+        pretrain(config=cfg, forward_step_func=forward_step)
+
+
+    if __name__ == "__main__":
+        main()
+
+
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  namespace: infra-perf
+  name: gptoss-c66-cd
+spec:
+  numNodes: 0
+  channel:
+    resourceClaimTemplate:
+      name: gptoss-c66-cd-channel
+
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  namespace: infra-perf
+  name: gptoss-c66
+  labels:
+    username: johnson
+spec:
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  replicatedJobs:
+  - name: w
+    replicas: 1
+    template:
+      metadata:
+        labels:
+          username: johnson
+      spec:
+        backoffLimit: 0
+        completionMode: Indexed
+        completions: 8
+        parallelism: 8
+        activeDeadlineSeconds: 14400
+        ttlSecondsAfterFinished: 43200
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/default-container: workload
+          spec:
+            runtimeClassName: nvidia
+            restartPolicy: Never
+            setHostnameAsFQDN: true
+            tolerations:
+            - key: reserved-for
+              operator: Equal
+              value: infra-perf
+              effect: NoSchedule
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+              reserved-for: infra-perf
+              nvidia.com/gpu.clique: "1849c6a7-9009-4917-9e85-66803cbe32df.32766"
+            topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: nvidia.com/gpu.clique
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  jobset.sigs.k8s.io/jobset-name: gptoss-c66
+            containers:
+            - name: workload
+              image: nvcr.io/nvidia/nemo:26.02
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: MASTER_PORT
+                value: "6002"
+              - name: WORLD_SIZE
+                value: "32"
+              - name: CUDA_DEVICE_ORDER
+                value: PCI_BUS_ID
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              - name: GLOO_SOCKET_IFNAME
+                value: eth0
+              - name: HF_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: hf-token
+                    key: token
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                set -euo pipefail
+                echo "Pod on $(hostname --fqdn) is running"
+                echo "Pod is assigned job index $JOB_COMPLETION_INDEX / 8 nodes"
+
+                JOBSET_NAME="gptoss-c66"
+                MASTER_ADDR="${JOBSET_NAME}-w-0-0.${JOBSET_NAME}"
+                NNODES=8
+                GPUS_PER_NODE=4
+                TRAIN_SCRIPT=/workload/configs/gpt-oss-120b-bf16.py
+                sleep 10
+
+                OMP_NUM_THREADS=12 TORCH_NCCL_ENABLE_MONITORING=0 \
+                torchrun \
+                  --nproc-per-node="${GPUS_PER_NODE}" \
+                  --nnodes="${NNODES}" \
+                  --node_rank="${JOB_COMPLETION_INDEX}" \
+                  --rdzv_id="${JOBSET_NAME}" \
+                  --master_addr="${MASTER_ADDR}" \
+                  --master_port="${MASTER_PORT}" \
+                  ${TRAIN_SCRIPT}
+
+                echo "Training completed"
+                echo "Pod on $(hostname --fqdn) is exiting"
+              volumeMounts:
+              - name: workload-configuration
+                mountPath: /workload/configs
+              - name: dshm
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                limits:
+                  nvidia.com/gpu: 4
+                claims:
+                - name: compute-domain-channel
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: gptoss-c66-cd-channel
+            volumes:
+            - name: workload-configuration
+              configMap:
+                name: gptoss-c66-config
+                items:
+                - key: gpt-oss-120b-bf16.py
+                  path: gpt-oss-120b-bf16.py
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 250Gi
+  successPolicy:
+    operator: All
